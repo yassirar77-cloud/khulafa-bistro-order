@@ -15,14 +15,9 @@ from pathlib import Path
 BOT_TOKEN = "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78"
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-from fastapi.staticfiles import StaticFiles
-
 app = FastAPI(title="Khulafa Bistro API")
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# CORS - Allow Telegram Mini App
+# CORS - Allow Telegram Mini App (MUST BE FIRST!)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,6 +25,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files (AFTER CORS!)
+import os
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Create uploads directory
 
@@ -39,7 +39,6 @@ def get_db():
     conn = sqlite3.connect('khulafa_bistro.db')
     conn.row_factory = sqlite3.Row
     return conn
-
 # Pydantic Models
 class MenuItem(BaseModel):
     id: int
