@@ -31,7 +31,20 @@ import os
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Serve frontend directly
+@app.get("/")
+def read_root():
+    return FileResponse("static/index.html")
+
+@app.get("/static/index.html")
+def read_index():
+    return FileResponse("static/index.html")
+
 # Create uploads directory
+
+
+# Database helper
+def get_db():
 
 
 # Database helper
