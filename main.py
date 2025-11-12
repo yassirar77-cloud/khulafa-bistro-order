@@ -15,7 +15,12 @@ from pathlib import Path
 BOT_TOKEN = "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78"
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+from fastapi.staticfiles import StaticFiles
+
 app = FastAPI(title="Khulafa Bistro API")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # CORS - Allow Telegram Mini App
 app.add_middleware(
