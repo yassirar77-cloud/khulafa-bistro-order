@@ -180,7 +180,7 @@ async def create_order(order: CreateOrder):
     
     order_text += f"\nTOTAL: RM{total_price:.2f}"
     
-    send_message("-5035459146", order_text)
+    send_message(-5035459146, order_text)
 
 @app.get("/api/orders/{order_id}")
 async def get_order(order_id: int):
