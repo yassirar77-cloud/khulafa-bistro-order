@@ -235,6 +235,21 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
     order = cursor.fetchone()
     conn.close()
 
+    # Send payment screenshot to Telegram group
+    try:
+        with open(filepath, 'rb') as photo:
+            requests.post(
+                f"{TELEGRAM_API}/sendPhoto",
+                data={
+                    'chat_id': -1003483753298,
+                    'caption': f"💳 Payment Receipt\nOrder #{order['order_number']}\nCustomer: {order['customer_name']}\nTotal: RM{order['total_price']:.2f}"
+                },
+                files={'photo': photo}
+            )
+            print(f"Payment photo sent for order {order_id}")
+    except Exception as e:
+        print(f"Error sending payment photo: {e}")
+
     return {"success": True, "filepath": filepath}
 
 @app.get("/api/settings/{key}")
