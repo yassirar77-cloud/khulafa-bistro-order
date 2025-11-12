@@ -157,12 +157,7 @@ async def create_order(order: CreateOrder):
     conn.commit()
     conn.close()
 
-    return {
-        "success": True,
-        "order_id": order_id,
-        "order_number": order_number,
-        "total_price": total_price
-    }# Send order to Telegram group
+    # Send order to Telegram group
     order_text = f"🆕 NEW ORDER!\n\n"
     order_text += f"Order #: {order_number}\n"
     order_text += f"Customer: {order.customer_name}\n"
@@ -182,6 +177,12 @@ async def create_order(order: CreateOrder):
     
     send_message(-1003483753298, order_text)
 
+    return {
+        "success": True,
+        "order_id": order_id,
+        "order_number": order_number,
+        "total_price": total_price
+    }
 @app.get("/api/orders/{order_id}")
 async def get_order(order_id: int):
     """Get order details"""
