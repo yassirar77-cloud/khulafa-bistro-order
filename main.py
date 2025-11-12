@@ -162,7 +162,25 @@ async def create_order(order: CreateOrder):
         "order_id": order_id,
         "order_number": order_number,
         "total_price": total_price
-    }
+    }# Send order to Telegram group
+    order_text = f"🆕 NEW ORDER!\n\n"
+    order_text += f"Order #: {order_number}\n"
+    order_text += f"Customer: {order.customer_name}\n"
+    order_text += f"Phone: {order.customer_phone}\n"
+    order_text += f"Type: {order.order_type}\n\n"
+    order_text += f"Items:\n"
+    
+    conn2 = get_db()
+    cursor2 = conn2.cursor()
+    for item_data in order_items_data:
+        cursor2.execute('SELECT name FROM menu_items WHERE id = ?', (item_data['menu_item_id'],))
+        menu_name = cursor2.fetchone()
+        order_text += f"• {item_data['quantity']}x {menu_name['name']} - RM{item_data['price']*item_data['quantity']:.2f}\n"
+    conn2.close()
+    
+    order_text += f"\nTOTAL: RM{total_price:.2f}"
+    
+    send_message("-5035459146", order_text)
 
 @app.get("/api/orders/{order_id}")
 async def get_order(order_id: int):
