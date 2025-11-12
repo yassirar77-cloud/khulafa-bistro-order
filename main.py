@@ -43,9 +43,6 @@ def read_index():
 # Create uploads directory
 
 
-# Database helper
-def get_db():
-
 
 # Database helper
 def get_db():
