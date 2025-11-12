@@ -294,7 +294,7 @@ async def confirm_payment(order_id: int):
     return {"success": True}
 
 # Telegram Helper Functions
-def send_message(chat_id: str, text: str, reply_markup=None):
+def send_message(chat_id, text, reply_markup=None):
     """Send a Telegram message"""
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
@@ -304,9 +304,14 @@ def send_message(chat_id: str, text: str, reply_markup=None):
     }
     if reply_markup:
         payload["reply_markup"] = json.dumps(reply_markup)
-
-    response = requests.post(url, json=payload)
-    return response.json()
+    
+    try:
+        response = requests.post(url, json=payload)
+        print(f"Telegram response: {response.text}")
+        return response.json()
+    except Exception as e:
+        print(f"Telegram error: {e}")
+        return None
 
 def send_customer_notification(customer_telegram_id: str, order, status: str):
     """Send status update to customer"""
