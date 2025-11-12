@@ -41,7 +41,9 @@ def read_index():
     return FileResponse("static/index.html")
 
 # Create uploads directory
-
+import os
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
 
 
 # Database helper
