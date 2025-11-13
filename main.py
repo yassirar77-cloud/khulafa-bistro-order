@@ -17,7 +17,7 @@ TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 app = FastAPI(title="Khulafa Bistro API")
 
-# CORS - Allow Telegram Mini App (MUST BE FIRST!)
+# CORS - Allow Telegram Mini App
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,7 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files (AFTER CORS!)
+# Mount static files
 import os
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -45,12 +45,12 @@ import os
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
 
-
 # Database helper
 def get_db():
     conn = sqlite3.connect('khulafa_bistro.db')
     conn.row_factory = sqlite3.Row
     return conn
+
 # Pydantic Models
 class MenuItem(BaseModel):
     id: int
@@ -175,7 +175,9 @@ async def create_order(order: CreateOrder):
     
     order_text += f"\nTOTAL: RM{total_price:.2f}"
     
+    print(f"Sending order to Telegram group...")
     send_message(-1003483753298, order_text)
+    print(f"Order sent to group!")
 
     return {
         "success": True,
@@ -183,6 +185,7 @@ async def create_order(order: CreateOrder):
         "order_number": order_number,
         "total_price": total_price
     }
+
 @app.get("/api/orders/{order_id}")
 async def get_order(order_id: int):
     """Get order details"""
@@ -230,7 +233,7 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
     cursor.execute('UPDATE orders SET payment_slip_url = ? WHERE id = ?', (filepath, order_id))
     conn.commit()
 
-    # Get order details for notification
+    # Get order details
     cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
     order = cursor.fetchone()
     conn.close()
@@ -246,11 +249,33 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
                 },
                 files={'photo': photo}
             )
-            print(f"Payment photo sent for order {order_id}")
+            print(f"Payment photo sent to group")
     except Exception as e:
         print(f"Error sending payment photo: {e}")
 
-    return {"success": True, "filepath": filepath}
+    # Send confirmation to customer
+    customer_message = f"""✅ Payment Receipt Received!
+
+Thank you for your payment!
+
+📋 Order Details:
+Order #: {order['order_number']}
+Total: RM{order['total_price']:.2f}
+Type: {order['order_type']}
+
+Your order is now being prepared! 🍳
+
+We will notify you when it's ready.
+
+Thank you for choosing Khulafa Bistro! 🌟"""
+    
+    try:
+        send_message(order['customer_telegram_id'], customer_message)
+        print(f"Confirmation sent to customer")
+    except Exception as e:
+        print(f"Error sending customer confirmation: {e}")
+
+    return {"success": True, "filepath": filepath, "message": "Payment received! You will be notified when your order is ready."}
 
 @app.get("/api/settings/{key}")
 async def get_setting(key: str):
@@ -349,6 +374,6 @@ def send_customer_notification(customer_telegram_id: str, order, status: str):
 
     send_message(customer_telegram_id, message)
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
