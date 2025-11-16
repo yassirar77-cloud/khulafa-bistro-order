@@ -383,11 +383,13 @@
             </div>
 
             <div class="qr-container" id="qrCodeSection" style="display: none;">
-                <h3>Scan to Pay</h3>
-                <img id="qrImage" src="" alt="Payment QR">
-                <p style="margin-top: 10px;">Scan with your banking app</p>
-            </div>
-
+    <h3>💳 Scan to Pay with Maybank</h3>
+    <img id="qrImage" src="" alt="Payment QR">
+    <p style="margin-top: 10px;">Scan with your banking app</p>
+    <button onclick="downloadQRCode()" style="background: #FFD700; color: #000; padding: 10px 20px; border: none; border-radius: 8px; margin-top: 15px; cursor: pointer; font-weight: bold; font-size: 16px;">
+        🍰 Download QR Code
+    </button>
+</div>
             <div class="form-group">
                 <label>Upload Payment Screenshot:</label>
                 <div class="upload-area" onclick="document.getElementById('paymentFile').click()">
@@ -655,8 +657,44 @@
         document.getElementById('searchInput').addEventListener('input', (e) => {
             renderMenu(e.target.value);
         });
-
+            // QR Code Download Function
+        function downloadQRCode() {
+            try {
+                const qrImage = document.getElementById('qrImage');
+                
+                if (!qrImage || !qrImage.src) {
+                    tg.showAlert('QR code not available!');
+                    return;
+                }
+                
+                if (qrImage.src.startsWith('data:image')) {
+                    const link = document.createElement('a');
+                    link.href = qrImage.src;
+                    link.download = 'khulafa-maybank-qr.png';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    tg.showAlert('✅ QR Code downloaded!');
+                } else {
+                    fetch(qrImage.src)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = 'khulafa-maybank-qr.png';
+                            link.click();
+                            URL.revokeObjectURL(url);
+                            tg.showAlert('✅ Downloaded!');
+                        })
+                        .catch(() => window.open(qrImage.src, '_blank'));
+                }
+            } catch (error) {
+                tg.showAlert('Please take a screenshot instead.');
+            }
+        }
         loadMenu();
     </script>
 </body>
+
 </html>
