@@ -658,39 +658,50 @@
             renderMenu(e.target.value);
         });
             // QR Code Download Function
-        function downloadQRCode() {
-            try {
-                const qrImage = document.getElementById('qrImage');
-                
-                if (!qrImage || !qrImage.src) {
-                    tg.showAlert('QR code not available!');
-                    return;
-                }
-                
-                if (qrImage.src.startsWith('data:image')) {
+      function downloadQR() {
+    try {
+        const qrImage = document.getElementById('qrImage');
+        
+        if (!qrImage || !qrImage.src) {
+            tg.showAlert('⚠️ QR code not available!');
+            return;
+        }
+
+        // For Telegram WebApp - open in new window for manual save
+        if (window.Telegram && window.Telegram.WebApp) {
+            // Convert base64 to blob
+            fetch(qrImage.src)
+                .then(res => res.blob())
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
-                    link.href = qrImage.src;
-                    link.download = 'khulafa-maybank-qr.png';
+                    link.href = url;
+                    link.download = 'khulafa-maybank-qr.jpg';
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    tg.showAlert('✅ QR Code downloaded!');
-                } else {
-                    fetch(qrImage.src)
-                        .then(res => res.blob())
-                        .then(blob => {
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = 'khulafa-maybank-qr.png';
-                            link.click();
-                            URL.revokeObjectURL(url);
-                            tg.showAlert('✅ Downloaded!');
-                        })
-                        .catch(() => window.open(qrImage.src, '_blank'));
-                }
-            } catch (error) {
-                tg.showAlert('Please take a screenshot instead.');
+                    URL.revokeObjectURL(url);
+                    tg.showAlert('✅ QR Code downloaded! Check your Downloads folder.');
+                })
+                .catch(() => {
+                    // Fallback - open in new window
+                    window.open(qrImage.src, '_blank');
+                    tg.showAlert('📱 Long press the image to save it');
+                });
+        } else {
+            // Regular browser download
+            const link = document.createElement('a');
+            link.href = qrImage.src;
+            link.download = 'khulafa-maybank-qr.jpg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    } catch (error) {
+        console.error('Download error:', error);
+        tg.showAlert('❌ Could not download. Please take a screenshot instead.');
+    }
+}
             }
         }
         loadMenu();
@@ -698,3 +709,4 @@
 </body>
 
 </html>
+
