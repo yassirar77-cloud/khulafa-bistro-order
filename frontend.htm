@@ -384,10 +384,10 @@
 
             <div class="qr-container" id="qrCodeSection" style="display: none;">
     <h3>💳 Scan to Pay with Maybank</h3>
-    <img id="qrImage" src="" alt="Payment QR">
+    <img id="qrImage" src="" alt="Maybank QR Code">
     <p style="margin-top: 10px;">Scan with your banking app</p>
-    <button onclick="downloadQRCode()" style="background: #FFD700; color: #000; padding: 10px 20px; border: none; border-radius: 8px; margin-top: 15px; cursor: pointer; font-weight: bold; font-size: 16px;">
-        🍰 Download QR Code
+    <button onclick="shareQR()" style="margin-top: 10px; background: #FFD700; color: #000; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
+        📤 Share/Save QR Code
     </button>
 </div>
             <div class="form-group">
@@ -657,49 +657,31 @@
         document.getElementById('searchInput').addEventListener('input', (e) => {
             renderMenu(e.target.value);
         });
-            // QR Code Download Function
-      function downloadQR() {
+     async function shareQR() {
     try {
         const qrImage = document.getElementById('qrImage');
         
-        if (!qrImage || !qrImage.src) {
-            tg.showAlert('⚠️ QR code not available!');
-            return;
-        }
-
-        // For Telegram WebApp - open in new window for manual save
-        if (window.Telegram && window.Telegram.WebApp) {
-            // Convert base64 to blob
-            fetch(qrImage.src)
-                .then(res => res.blob())
-                .then(blob => {
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = 'khulafa-maybank-qr.jpg';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                    tg.showAlert('✅ QR Code downloaded! Check your Downloads folder.');
-                })
-                .catch(() => {
-                    // Fallback - open in new window
-                    window.open(qrImage.src, '_blank');
-                    tg.showAlert('📱 Long press the image to save it');
-                });
+        // Convert base64 to blob
+        const response = await fetch(qrImage.src);
+        const blob = await response.blob();
+        const file = new File([blob], 'khulafa-qr.jpg', { type: 'image/jpeg' });
+        
+        // Use native share if available
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                files: [file],
+                title: 'Khulafa Maybank QR',
+                text: 'Scan to pay'
+            });
         } else {
-            // Regular browser download
-            const link = document.createElement('a');
-            link.href = qrImage.src;
-            link.download = 'khulafa-maybank-qr.jpg';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Fallback - open in new window
+            window.open(qrImage.src, '_blank');
+            tg.showAlert('💡 Long press the QR code to save it!');
         }
     } catch (error) {
-        console.error('Download error:', error);
-        tg.showAlert('❌ Could not download. Please take a screenshot instead.');
+        // Final fallback
+        window.open(document.getElementById('qrImage').src, '_blank');
+        tg.showAlert('💡 Long press the QR code to save it to your phone!');
     }
 }
             }
@@ -709,4 +691,5 @@
 </body>
 
 </html>
+
 
