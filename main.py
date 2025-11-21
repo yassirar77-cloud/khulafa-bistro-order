@@ -165,7 +165,7 @@ async def create_order(order: CreateOrder):
         ''', (order_id, item_data['menu_item_id'], item_data['quantity'],
               item_data['price'], item_data['note']))
 
-    conn.commit()
+   conn.commit()
     conn.close()
 
     # Send order to Telegram group
@@ -174,7 +174,7 @@ async def create_order(order: CreateOrder):
     order_text += f"Customer: {order.customer_name}\n"
     order_text += f"Phone: {order.customer_phone}\n"
     order_text += f"Type: {order.order_type}\n\n"
-   order_text += f"Items:\n"
+    order_text += f"Items:\n"
     
     conn2 = get_db()
     cursor2 = conn2.cursor()
@@ -182,24 +182,11 @@ async def create_order(order: CreateOrder):
         cursor2.execute('SELECT name FROM menu_items WHERE id = ?', (item_data['menu_item_id'],))
         menu_name = cursor2.fetchone()
         order_text += f"• {item_data['quantity']}x {menu_name['name']} - RM{item_data['price']*item_data['quantity']:.2f}"
-        # Add note if exists
-        if item_data.get('note'):
-            order_text += f"\n  📝 Note: {item_data['note']}"
-        order_text += "\n"
-    conn2.close()
- conn2 = get_db()
-    cursor2 = conn2.cursor()
-    for item_data in order_items_data:
-        cursor2.execute('SELECT name FROM menu_items WHERE id = ?', (item_data['menu_item_id'],))
-        menu_name = cursor2.fetchone()
-        order_text += f"• {item_data['quantity']}x {menu_name['name']} - RM{item_data['price']*item_data['quantity']:.2f}"
-        # Add note if exists
         if item_data.get('note'):
             order_text += f"\n  📝 Note: {item_data['note']}"
         order_text += "\n"
     conn2.close()
     
-    order_text += f"\nTOTAL: RM{total_price:.2f}"
     order_text += f"\nTOTAL: RM{total_price:.2f}"
     
     print(f"Sending order to Telegram group...")
