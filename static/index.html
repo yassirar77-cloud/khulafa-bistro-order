@@ -51,6 +51,39 @@
             animation: slideDown 0.5s ease;
         }
 
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .history-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .track-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
         .logo {
             display: flex;
             align-items: center;
@@ -230,6 +263,7 @@
 
         .menu-item {
             display: flex;
+            flex-direction: column;
             padding: 18px;
             border-bottom: 1px solid #f1f1f1;
             transition: var(--transition);
@@ -249,7 +283,12 @@
 
         .menu-item:hover {
             background: #f8f9fa;
-            transform: translateX(5px);
+        }
+
+        .item-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .item-image {
@@ -305,11 +344,25 @@
             font-size: 17px;
         }
 
+        .item-details {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         .item-price {
             color: var(--primary);
             font-weight: 800;
             font-size: 18px;
             animation: priceGlow 2s ease-in-out infinite;
+        }
+
+        .item-time {
+            font-size: 12px;
+            color: var(--light-text);
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .item-controls {
@@ -377,6 +430,41 @@
 
         .add-btn:active {
             transform: scale(0.9) rotate(90deg);
+        }
+
+        .item-note {
+            margin-top: 12px;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .item-note.show {
+            display: block;
+        }
+
+        .item-note input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .item-note input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        .add-note-btn {
+            background: none;
+            border: none;
+            color: var(--primary);
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .cart-summary {
@@ -469,6 +557,7 @@
             justify-content: center;
             padding: 20px;
             animation: fadeIn 0.3s ease;
+            overflow-y: auto;
         }
 
         .modal.show {
@@ -529,8 +618,73 @@
             animation: fadeIn 0.5s ease;
         }
 
+        .summary-item-details {
+            flex: 1;
+        }
+
+        .summary-item-note {
+            font-size: 12px;
+            color: var(--light-text);
+            font-style: italic;
+            margin-top: 4px;
+        }
+
         .summary-item:last-child {
             border-bottom: none;
+        }
+
+        .promo-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 12px;
+            border: 2px dashed var(--warning);
+        }
+
+        .promo-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .promo-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .apply-promo-btn {
+            padding: 12px 20px;
+            background: var(--warning);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .promo-success {
+            margin-top: 10px;
+            padding: 10px;
+            background: #d4edda;
+            color: #155724;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .promo-error {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .discount-row {
+            color: var(--success);
+            font-weight: 600;
         }
 
         .summary-total {
@@ -570,9 +724,44 @@
             transform: translateY(-2px);
         }
 
+        .payment-methods {
+            margin: 20px 0;
+        }
+
+        .payment-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .payment-tab {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .payment-tab.active {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: white;
+        }
+
+        .payment-content {
+            display: none;
+        }
+
+        .payment-content.active {
+            display: block;
+        }
+
         .qr-container {
             text-align: center;
-            margin: 25px 0;
             padding: 20px;
             background: #f8f9fa;
             border-radius: 12px;
@@ -744,6 +933,138 @@
             animation: float 3s ease-in-out infinite;
         }
 
+        /* Order History Styles */
+        .history-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .order-number {
+            font-weight: 700;
+            color: var(--secondary);
+        }
+
+        .order-date {
+            font-size: 12px;
+            color: var(--light-text);
+        }
+
+        .order-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-confirmed {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .status-preparing {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-cancelled {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .reorder-btn {
+            width: 100%;
+            padding: 10px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        /* Order Tracking Styles */
+        .tracking-timeline {
+            padding: 20px;
+        }
+
+        .timeline-item {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        .timeline-item:not(:last-child)::before {
+            content: '';
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 5px);
+            background: #e2e8f0;
+        }
+
+        .timeline-dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 18px;
+        }
+
+        .timeline-dot.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .timeline-dot.inactive {
+            background: #e2e8f0;
+            color: #718096;
+        }
+
+        .timeline-content {
+            flex: 1;
+        }
+
+        .timeline-title {
+            font-weight: 700;
+            color: var(--secondary);
+            margin-bottom: 5px;
+        }
+
+        .timeline-time {
+            font-size: 12px;
+            color: var(--light-text);
+        }
+
         /* ANIMATIONS */
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -889,6 +1210,14 @@
 </head>
 <body>
     <div class="header">
+        <div class="header-actions">
+            <button class="history-btn" onclick="showHistory()">
+                <i class="fas fa-history"></i> History
+            </button>
+            <button class="track-btn" onclick="showTracking()">
+                <i class="fas fa-map-marker-alt"></i> Track
+            </button>
+        </div>
         <div class="logo">
             <i class="fas fa-utensils"></i>
         </div>
@@ -938,6 +1267,7 @@
         </div>
     </div>
 
+    <!-- Checkout Modal -->
     <div class="modal" id="checkoutModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -949,6 +1279,16 @@
             
             <div class="order-summary" id="orderSummary"></div>
 
+            <!-- Promo Code Section -->
+            <div class="promo-section">
+                <div class="promo-input-group">
+                    <input type="text" id="promoCode" class="promo-input" placeholder="Enter promo code">
+                    <button class="apply-promo-btn" onclick="applyPromo()">Apply</button>
+                </div>
+                <div class="promo-success" id="promoSuccess"></div>
+                <div class="promo-error" id="promoError"></div>
+            </div>
+
             <div class="form-group">
                 <label class="form-label">Name:</label>
                 <input type="text" id="customerName" class="form-input" placeholder="Enter your name">
@@ -959,15 +1299,59 @@
                 <input type="tel" id="customerPhone" class="form-input" placeholder="01X-XXXXXXX">
             </div>
 
-            <div class="qr-container" id="qrCodeSection" style="display: none;">
-                <h3 class="qr-title">
-                    <i class="fas fa-qrcode"></i> Scan to Pay with Maybank
-                </h3>
-                <img id="qrImage" class="qr-image" src="" alt="Payment QR Code">
-                <p style="margin-top: 10px; color: var(--light-text);">Scan with your banking app</p>
-                <button onclick="downloadQRCode()" class="download-btn">
-                    <i class="fas fa-download"></i> Download QR Code
-                </button>
+            <!-- Payment Method Selection -->
+            <div class="payment-methods">
+                <label class="form-label">Payment Method:</label>
+                <div class="payment-tabs">
+                    <div class="payment-tab active" onclick="switchPayment('maybank')">
+                        <i class="fas fa-university"></i> Maybank
+                    </div>
+                    <div class="payment-tab" onclick="switchPayment('tng')">
+                        <i class="fas fa-wallet"></i> TnG
+                    </div>
+                    <div class="payment-tab" onclick="switchPayment('grabpay')">
+                        <i class="fas fa-mobile-alt"></i> GrabPay
+                    </div>
+                </div>
+
+                <div class="payment-content active" id="maybank-content">
+                    <div class="qr-container">
+                        <h3 class="qr-title">
+                            <i class="fas fa-qrcode"></i> Scan to Pay with Maybank
+                        </h3>
+                        <img id="maybankQR" class="qr-image" src="" alt="Maybank QR Code">
+                        <p style="margin-top: 10px; color: var(--light-text);">Scan with Maybank app</p>
+                        <button onclick="downloadQRCode('maybank')" class="download-btn">
+                            <i class="fas fa-download"></i> Download QR
+                        </button>
+                    </div>
+                </div>
+
+                <div class="payment-content" id="tng-content">
+                    <div class="qr-container">
+                        <h3 class="qr-title">
+                            <i class="fas fa-qrcode"></i> Scan to Pay with Touch n Go
+                        </h3>
+                        <img id="tngQR" class="qr-image" src="" alt="TnG QR Code">
+                        <p style="margin-top: 10px; color: var(--light-text);">Scan with Touch n Go app</p>
+                        <button onclick="downloadQRCode('tng')" class="download-btn">
+                            <i class="fas fa-download"></i> Download QR
+                        </button>
+                    </div>
+                </div>
+
+                <div class="payment-content" id="grabpay-content">
+                    <div class="qr-container">
+                        <h3 class="qr-title">
+                            <i class="fas fa-qrcode"></i> Scan to Pay with GrabPay
+                        </h3>
+                        <img id="grabpayQR" class="qr-image" src="" alt="GrabPay QR Code">
+                        <p style="margin-top: 10px; color: var(--light-text);">Scan with Grab app</p>
+                        <button onclick="downloadQRCode('grabpay')" class="download-btn">
+                            <i class="fas fa-download"></i> Download QR
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="form-group">
@@ -992,17 +1376,86 @@
         </div>
     </div>
 
+    <!-- Order History Modal -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Order History</h2>
+                <button class="close-btn" onclick="closeHistory()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="historyContainer">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading your orders...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Tracking Modal -->
+    <div class="modal" id="trackingModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Track Order</h2>
+                <button class="close-btn" onclick="closeTracking()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="trackingContainer">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading tracking info...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand();
+        // Wait for Telegram WebApp to load
+        let tg;
+        
+        function initTelegram() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                tg = window.Telegram.WebApp;
+                tg.expand();
+                console.log('Telegram WebApp initialized');
+            } else {
+                console.warn('Telegram WebApp not available, running in browser mode');
+                // Create a mock tg object for testing in browser
+                tg = {
+                    expand: () => {},
+                    showAlert: (msg) => alert(msg),
+                    initDataUnsafe: { user: { id: 'browser_test', first_name: 'Test', last_name: 'User' } }
+                };
+            }
+        }
+
+        // Initialize Telegram on page load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initTelegram);
+        } else {
+            initTelegram();
+        }
 
         let menu = {};
         let cart = {};
         let orderType = 'pickup';
         let selectedFile = null;
+        let appliedPromo = null;
+        let currentPaymentMethod = 'maybank';
         
-        // FIXED: Updated to your correct Render URL
         const API_URL = 'https://khulafa-bistro-order.onrender.com/api';
+
+        // Estimated prep times (in minutes)
+        const PREP_TIMES = {
+            'AIR TIN': 2,
+            'NASI': 15,
+            'MIE': 12,
+            'AYAM': 20,
+            'DEFAULT': 10
+        };
 
         async function loadMenu() {
             try {
@@ -1015,6 +1468,15 @@
                 document.getElementById('menuContainer').innerHTML = 
                     '<div class="loading">Error loading menu. Please refresh.</div>';
             }
+        }
+
+        function getEstimatedTime(categoryName) {
+            for (const key in PREP_TIMES) {
+                if (categoryName.toUpperCase().includes(key)) {
+                    return PREP_TIMES[key];
+                }
+            }
+            return PREP_TIMES.DEFAULT;
         }
 
         function renderMenu(searchTerm = '') {
@@ -1040,31 +1502,52 @@
                 `;
 
                 const menuItemsContainer = categoryDiv.querySelector('.menu-items');
+                const estimatedTime = getEstimatedTime(category);
 
                 filteredItems.forEach(item => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'menu-item';
                     const quantity = cart[item.id]?.quantity || 0;
+                    const note = cart[item.id]?.note || '';
 
                     itemDiv.innerHTML = `
-                        <div class="item-image">
-                            <i class="fas fa-${getItemIcon(item.name)}"></i>
+                        <div class="item-main">
+                            <div class="item-image">
+                                <i class="fas fa-${getItemIcon(item.name)}"></i>
+                            </div>
+                            <div class="item-info">
+                                <div class="item-name">${item.name}</div>
+                                <div class="item-details">
+                                    <div class="item-price">RM ${item.price.toFixed(2)}</div>
+                                    <div class="item-time">
+                                        <i class="fas fa-clock"></i>
+                                        ~${estimatedTime} min
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="item-controls">
+                                ${quantity > 0 ? `
+                                    <button class="qty-btn" onclick="updateCart(${item.id}, -1)">−</button>
+                                    <div class="qty-display">${quantity}</div>
+                                    <button class="qty-btn" onclick="updateCart(${item.id}, 1)">+</button>
+                                ` : `
+                                    <button class="add-btn" onclick="updateCart(${item.id}, 1)">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                `}
+                            </div>
                         </div>
-                        <div class="item-info">
-                            <div class="item-name">${item.name}</div>
-                            <div class="item-price">RM ${item.price.toFixed(2)}</div>
-                        </div>
-                        <div class="item-controls">
-                            ${quantity > 0 ? `
-                                <button class="qty-btn" onclick="updateCart(${item.id}, -1)">−</button>
-                                <div class="qty-display">${quantity}</div>
-                                <button class="qty-btn" onclick="updateCart(${item.id}, 1)">+</button>
-                            ` : `
-                                <button class="add-btn" onclick="updateCart(${item.id}, 1)">
-                                    <i class="fas fa-plus"></i>
-                                </button>
-                            `}
-                        </div>
+                        ${quantity > 0 ? `
+                            <button class="add-note-btn" onclick="toggleNote(${item.id})">
+                                <i class="fas fa-comment-alt"></i> ${note ? 'Edit note' : 'Add note'}
+                            </button>
+                            <div class="item-note" id="note-${item.id}" ${note ? 'style="display:block"' : ''}>
+                                <input type="text" 
+                                       placeholder="e.g., Extra spicy, No onions" 
+                                       value="${note}"
+                                       onchange="updateNote(${item.id}, this.value)">
+                            </div>
+                        ` : ''}
                     `;
 
                     menuItemsContainer.appendChild(itemDiv);
@@ -1080,6 +1563,20 @@
                         <p>No items found</p>
                     </div>
                 `;
+            }
+        }
+
+        function toggleNote(itemId) {
+            const noteDiv = document.getElementById(`note-${itemId}`);
+            if (noteDiv) {
+                noteDiv.classList.toggle('show');
+                noteDiv.style.display = noteDiv.style.display === 'block' ? 'none' : 'block';
+            }
+        }
+
+        function updateNote(itemId, note) {
+            if (cart[itemId]) {
+                cart[itemId].note = note;
             }
         }
 
@@ -1121,7 +1618,7 @@
             if (!item) return;
 
             if (!cart[itemId]) {
-                cart[itemId] = { ...item, quantity: 0 };
+                cart[itemId] = { ...item, quantity: 0, note: '' };
             }
 
             cart[itemId].quantity += change;
@@ -1140,6 +1637,7 @@
             
             if (cartItems.length === 0) {
                 cartSummary.classList.remove('show');
+                appliedPromo = null;
                 return;
             }
 
@@ -1154,15 +1652,42 @@
 
         async function showCheckout() {
             let summaryHTML = '';
-            let total = 0;
+            let subtotal = 0;
 
             for (const item of Object.values(cart)) {
                 const itemTotal = item.price * item.quantity;
-                total += itemTotal;
+                subtotal += itemTotal;
                 summaryHTML += `
                     <div class="summary-item">
-                        <span>${item.quantity}x ${item.name}</span>
+                        <div class="summary-item-details">
+                            <span>${item.quantity}x ${item.name}</span>
+                            ${item.note ? `<div class="summary-item-note">Note: ${item.note}</div>` : ''}
+                        </div>
                         <span>RM ${itemTotal.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+
+            // Calculate discount
+            let discount = 0;
+            if (appliedPromo) {
+                discount = (subtotal * appliedPromo.discount) / 100;
+            }
+
+            const total = subtotal - discount;
+
+            summaryHTML += `
+                <div class="summary-item">
+                    <span>Subtotal</span>
+                    <span>RM ${subtotal.toFixed(2)}</span>
+                </div>
+            `;
+
+            if (discount > 0) {
+                summaryHTML += `
+                    <div class="summary-item discount-row">
+                        <span>Discount (${appliedPromo.code})</span>
+                        <span>-RM ${discount.toFixed(2)}</span>
                     </div>
                 `;
             }
@@ -1176,15 +1701,34 @@
 
             document.getElementById('orderSummary').innerHTML = summaryHTML;
 
+            // Load payment QR codes
             try {
-                const response = await fetch(`${API_URL}/settings/payment_qr_url`);
-                const data = await response.json();
-                if (data.value) {
-                    document.getElementById('qrImage').src = data.value;
-                    document.getElementById('qrCodeSection').style.display = 'block';
+                // Maybank QR
+                const maybankResponse = await fetch(`${API_URL}/settings/payment_qr_url`);
+                const maybankData = await maybankResponse.json();
+                if (maybankData.value) {
+                    document.getElementById('maybankQR').src = maybankData.value;
+                }
+
+                // TnG QR (you'll need to add this to your backend settings)
+                const tngResponse = await fetch(`${API_URL}/settings/tng_qr_url`);
+                const tngData = await tngResponse.json();
+                if (tngData.value) {
+                    document.getElementById('tngQR').src = tngData.value;
+                } else {
+                    document.getElementById('tngQR').src = maybankData.value; // Fallback to Maybank
+                }
+
+                // GrabPay QR (you'll need to add this to your backend settings)
+                const grabpayResponse = await fetch(`${API_URL}/settings/grabpay_qr_url`);
+                const grabpayData = await grabpayResponse.json();
+                if (grabpayData.value) {
+                    document.getElementById('grabpayQR').src = grabpayData.value;
+                } else {
+                    document.getElementById('grabpayQR').src = maybankData.value; // Fallback to Maybank
                 }
             } catch (error) {
-                console.log('No QR code set');
+                console.log('Error loading QR codes:', error);
             }
 
             if (tg.initDataUnsafe.user) {
@@ -1199,6 +1743,61 @@
             document.getElementById('checkoutModal').classList.remove('show');
         }
 
+        function switchPayment(method) {
+            currentPaymentMethod = method;
+            
+            // Update tabs
+            document.querySelectorAll('.payment-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.closest('.payment-tab').classList.add('active');
+            
+            // Update content
+            document.querySelectorAll('.payment-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`${method}-content`).classList.add('active');
+        }
+
+        async function applyPromo() {
+            const promoCode = document.getElementById('promoCode').value.trim().toUpperCase();
+            const promoSuccess = document.getElementById('promoSuccess');
+            const promoError = document.getElementById('promoError');
+            
+            promoSuccess.style.display = 'none';
+            promoError.style.display = 'none';
+
+            if (!promoCode) {
+                promoError.textContent = 'Please enter a promo code';
+                promoError.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/promo/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: promoCode })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    appliedPromo = {
+                        code: promoCode,
+                        discount: data.discount
+                    };
+                    promoSuccess.textContent = `✓ ${data.discount}% discount applied!`;
+                    promoSuccess.style.display = 'block';
+                    showCheckout(); // Refresh the summary
+                } else {
+                    const error = await response.json();
+                    promoError.textContent = error.message || 'Invalid promo code';
+                    promoError.style.display = 'block';
+                    appliedPromo = null;
+                }
+            } catch (error) {
+                console.error('Error applying promo:', error);
+                promoError.textContent = 'Error validating promo code';
+                promoError.style.display = 'block';
+            }
+        }
+
         function handleFileSelect(event) {
             selectedFile = event.target.files[0];
             if (selectedFile) {
@@ -1206,9 +1805,9 @@
             }
         }
 
-        function downloadQRCode() {
+        function downloadQRCode(method) {
             try {
-                const qrImage = document.getElementById('qrImage');
+                const qrImage = document.getElementById(`${method}QR`);
                 
                 if (!qrImage || !qrImage.src) {
                     tg.showAlert('QR code not available!');
@@ -1217,7 +1816,7 @@
 
                 const link = document.createElement('a');
                 link.href = qrImage.src;
-                link.download = 'khulafa-maybank-qr.jpg';
+                link.download = `khulafa-${method}-qr.jpg`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -1258,10 +1857,12 @@
                 customer_phone: phone,
                 order_type: orderType,
                 arrival_time: arrivalTime,
+                payment_method: currentPaymentMethod,
+                promo_code: appliedPromo?.code || null,
                 items: Object.values(cart).map(item => ({
                     menu_item_id: item.id,
                     quantity: item.quantity,
-                    note: null
+                    note: item.note || null
                 }))
             };
 
@@ -1282,9 +1883,15 @@
                     body: formData
                 });
 
-                tg.showAlert(`Order placed successfully!\n\nOrder Number: ${result.order_number}\nTotal: RM ${result.total_price.toFixed(2)}\n\nWe'll notify you when ready!`);
+                const estimatedTime = Object.values(cart).reduce((max, item) => {
+                    const time = getEstimatedTime(item.category || '');
+                    return Math.max(max, time);
+                }, 0);
+
+                tg.showAlert(`Order placed successfully!\n\nOrder Number: ${result.order_number}\nTotal: RM ${result.total_price.toFixed(2)}\nEstimated time: ~${estimatedTime} minutes\n\nWe'll notify you when ready!`);
                 
                 cart = {};
+                appliedPromo = null;
                 updateCartSummary();
                 renderMenu();
                 closeCheckout();
@@ -1295,6 +1902,122 @@
             }
         }
 
+        async function showHistory() {
+            document.getElementById('historyModal').classList.add('show');
+            const container = document.getElementById('historyContainer');
+            
+            try {
+                const userId = tg.initDataUnsafe.user?.id || 'unknown';
+                const response = await fetch(`${API_URL}/orders/history/${userId}`);
+                const orders = await response.json();
+
+                if (orders.length === 0) {
+                    container.innerHTML = '<div class="empty-cart"><i class="fas fa-receipt"></i><p>No order history yet</p></div>';
+                    return;
+                }
+
+                container.innerHTML = orders.map(order => `
+                    <div class="history-item">
+                        <div class="history-header">
+                            <div>
+                                <div class="order-number">#${order.order_number}</div>
+                                <div class="order-date">${new Date(order.created_at).toLocaleDateString()}</div>
+                            </div>
+                            <span class="order-status status-${order.status}">${order.status}</span>
+                        </div>
+                        <div style="margin: 10px 0;">
+                            ${order.items.map(item => `<div>${item.quantity}x ${item.name}</div>`).join('')}
+                        </div>
+                        <div style="font-weight: 700; color: var(--primary);">Total: RM ${order.total_price.toFixed(2)}</div>
+                        ${order.status === 'completed' ? `
+                            <button class="reorder-btn" onclick='reorder(${JSON.stringify(order.items)})'>
+                                <i class="fas fa-redo"></i> Reorder
+                            </button>
+                        ` : ''}
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading history:', error);
+                container.innerHTML = '<div class="loading">Error loading order history</div>';
+            }
+        }
+
+        function closeHistory() {
+            document.getElementById('historyModal').classList.remove('show');
+        }
+
+        function reorder(items) {
+            cart = {};
+            items.forEach(item => {
+                cart[item.menu_item_id] = {
+                    id: item.menu_item_id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    note: ''
+                };
+            });
+            updateCartSummary();
+            renderMenu();
+            closeHistory();
+            tg.showAlert('Items added to cart!');
+        }
+
+        async function showTracking() {
+            document.getElementById('trackingModal').classList.add('show');
+            const container = document.getElementById('trackingContainer');
+            
+            try {
+                const userId = tg.initDataUnsafe.user?.id || 'unknown';
+                const response = await fetch(`${API_URL}/orders/latest/${userId}`);
+                const order = await response.json();
+
+                if (!order) {
+                    container.innerHTML = '<div class="empty-cart"><i class="fas fa-map-marker-alt"></i><p>No active orders</p></div>';
+                    return;
+                }
+
+                const statuses = [
+                    { name: 'Order Placed', icon: 'fa-check-circle', key: 'pending' },
+                    { name: 'Confirmed', icon: 'fa-thumbs-up', key: 'confirmed' },
+                    { name: 'Preparing', icon: 'fa-fire', key: 'preparing' },
+                    { name: 'Ready', icon: 'fa-box', key: 'ready' }
+                ];
+
+                const currentIndex = statuses.findIndex(s => s.key === order.status);
+
+                container.innerHTML = `
+                    <div style="padding: 20px; background: white; border-radius: 12px; margin-bottom: 20px;">
+                        <div style="font-weight: 700; font-size: 18px; margin-bottom: 10px;">Order #${order.order_number}</div>
+                        <div style="color: var(--light-text);">Estimated time: ~${order.estimated_time || 20} minutes</div>
+                    </div>
+                    <div class="tracking-timeline">
+                        ${statuses.map((status, index) => `
+                            <div class="timeline-item">
+                                <div class="timeline-dot ${index <= currentIndex ? 'active' : 'inactive'}">
+                                    <i class="fas ${status.icon}"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <div class="timeline-title">${status.name}</div>
+                                    ${index <= currentIndex ? `<div class="timeline-time">${new Date(order.updated_at).toLocaleTimeString()}</div>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Error loading tracking:', error);
+                container.innerHTML = '<div class="loading">Error loading tracking info</div>';
+            }
+        }
+
+        function closeTracking() {
+            document.getElementById('trackingModal').classList.remove('show');
+        }
+
+        // Event listeners
         document.querySelectorAll('.type-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
@@ -1314,7 +2037,12 @@
             renderMenu(e.target.value);
         });
 
-        loadMenu();
+        // Load menu after everything is ready
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                loadMenu();
+            }, 100);
+        });
     </script>
 </body>
 </html>
