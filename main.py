@@ -373,11 +373,12 @@ def send_customer_notification(customer_telegram_id: str, order, status: str):
         else:
             message += "\n\n🍽️ Your table is ready! Please come in!"
 
-   send_message(customer_telegram_id, message)
+    send_message(customer_telegram_id, message)
 
 # Setup all enhanced features
 setup_enhanced_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
     uvicorn.run(app, host="0.0.0.0", port=8000)
