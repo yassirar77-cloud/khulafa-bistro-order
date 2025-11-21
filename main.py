@@ -178,10 +178,14 @@ async def create_order(order: CreateOrder):
     
     conn2 = get_db()
     cursor2 = conn2.cursor()
-    for item_data in order_items_data:
-        cursor2.execute('SELECT name FROM menu_items WHERE id = ?', (item_data['menu_item_id'],))
-        menu_name = cursor2.fetchone()
-        order_text += f"• {item_data['quantity']}x {menu_name['name']} - RM{item_data['price']*item_data['quantity']:.2f}"
+  for item_data in order_items_data:
+    cursor2.execute('SELECT name FROM menu_items WHERE id = ?', (item_data['menu_item_id'],))
+    menu_name = cursor2.fetchone()
+    order_text += f"• {item_data['quantity']}x {menu_name['name']} - RM{item_data['price']*item_data['quantity']:.2f}"
+    # Add note if exists
+    if item_data.get('note'):
+        order_text += f"\n  📝 Note: {item_data['note']}"
+    order_text += "\n"
         # Add note if exists
         if item_data.get('note'):
             order_text += f"\n  📝 Note: {item_data['note']}"
