@@ -1327,32 +1327,36 @@
                     </div>
                 </div>
 
-                <div class="payment-content" id="tng-content">
-                    <div class="qr-container">
-                        <h3 class="qr-title">
-                            <i class="fas fa-qrcode"></i> Scan to Pay with Touch n Go
-                        </h3>
-                        <img id="tngQR" class="qr-image" src="" alt="TnG QR Code">
-                        <p style="margin-top: 10px; color: var(--light-text);">Scan with Touch n Go app</p>
-                        <button onclick="downloadQRCode('tng')" class="download-btn">
-                            <i class="fas fa-download"></i> Download QR
-                        </button>
-                    </div>
-                </div>
-
-                <div class="payment-content" id="grabpay-content">
-                    <div class="qr-container">
-                        <h3 class="qr-title">
-                            <i class="fas fa-qrcode"></i> Scan to Pay with GrabPay
-                        </h3>
-                        <img id="grabpayQR" class="qr-image" src="" alt="GrabPay QR Code">
-                        <p style="margin-top: 10px; color: var(--light-text);">Scan with Grab app</p>
-                        <button onclick="downloadQRCode('grabpay')" class="download-btn">
-                            <i class="fas fa-download"></i> Download QR
-                        </button>
-                    </div>
-                </div>
-            </div>
+               <div class="payment-content" id="tng-content">
+    <div class="qr-container">
+        <div style="text-align: center; padding: 40px 20px; background: #f8f9fa; border-radius: 12px;">
+            <div style="font-size: 60px; margin-bottom: 20px;">🚧</div>
+            <h3 style="color: #2D3748; font-weight: 700; margin-bottom: 15px; font-size: 22px;">Coming Soon!</h3>
+            <p style="color: #718096; margin-bottom: 20px; font-size: 16px; line-height: 1.5;">
+                Touch n Go payment will be available soon.<br>
+                <strong>Please use Maybank QR for now.</strong>
+            </p>
+            <button onclick="switchPayment('maybank')" style="background: #FF6B35; color: white; padding: 14px 28px; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 16px; box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);">
+                <i class="fas fa-arrow-left"></i> Switch to Maybank
+            </button>
+        </div>
+    </div>
+</div>
+               <div class="payment-content" id="grabpay-content">
+    <div class="qr-container">
+        <div style="text-align: center; padding: 40px 20px; background: #f8f9fa; border-radius: 12px;">
+            <div style="font-size: 60px; margin-bottom: 20px;">🚧</div>
+            <h3 style="color: #2D3748; font-weight: 700; margin-bottom: 15px; font-size: 22px;">Coming Soon!</h3>
+            <p style="color: #718096; margin-bottom: 20px; font-size: 16px; line-height: 1.5;">
+                GrabPay payment will be available soon.<br>
+                <strong>Please use Maybank QR for now.</strong>
+            </p>
+            <button onclick="switchPayment('maybank')" style="background: #FF6B35; color: white; padding: 14px 28px; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 16px; box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);">
+                <i class="fas fa-arrow-left"></i> Switch to Maybank
+            </button>
+        </div>
+    </div>
+</div>
 
             <div class="form-group">
                 <label class="form-label">Upload Payment Screenshot:</label>
