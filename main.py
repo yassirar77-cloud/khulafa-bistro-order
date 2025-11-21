@@ -18,6 +18,18 @@ TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 app = FastAPI(title="Khulafa Bistro API")
 
+# Auto-run database migration on startup
+@app.on_event("startup")
+async def startup_event():
+    """Run database migration on startup"""
+    try:
+        print("Running database migration...")
+        import migrate_database
+        migrate_database.migrate_database()
+        print("Migration completed!")
+    except Exception as e:
+        print(f"Migration error (may already be done): {e}")
+
 # CORS - Allow Telegram Mini App
 app.add_middleware(
     CORSMiddleware,
@@ -28,7 +40,6 @@ app.add_middleware(
 )
 
 # Mount static files
-import os
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -42,7 +53,6 @@ def read_index():
     return FileResponse("static/index.html")
 
 # Create uploads directory
-import os
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
 
@@ -78,7 +88,7 @@ class UpdateOrderStatus(BaseModel):
 
 # API Endpoints
 
-@app.get("/")
+@app.get("/api/")
 async def root():
     return {"message": "Khulafa Bistro API is running!"}
 
@@ -380,5 +390,4 @@ setup_enhanced_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
     uvicorn.run(app, host="0.0.0.0", port=8000)
