@@ -10,6 +10,7 @@ from datetime import datetime
 import requests
 import os
 from pathlib import Path
+from enhanced_routes import setup_enhanced_routes
 
 # Telegram Bot Configuration
 BOT_TOKEN = "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78"
@@ -372,7 +373,10 @@ def send_customer_notification(customer_telegram_id: str, order, status: str):
         else:
             message += "\n\n🍽️ Your table is ready! Please come in!"
 
-    send_message(customer_telegram_id, message)
+   send_message(customer_telegram_id, message)
+
+# Setup all enhanced features
+setup_enhanced_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
