@@ -27,12 +27,6 @@ async def startup_event():
         import migrate_database
         migrate_database.migrate_database()
         print("Migration completed!")
-        
-        # Update payment QR codes
-        print("Updating payment QR codes...")
-        import update_qr_codes
-        update_qr_codes.update_payment_qr_codes()
-        print("QR codes updated!")
     except Exception as e:
         print(f"Migration error (may already be done): {e}")
 
@@ -165,6 +159,12 @@ async def create_order(order: CreateOrder):
 
     # Insert order items
     for item_data in order_items_data:
+        cursor.execute('''
+            INSERT INTO order_items (order_id, menu_item_id, quantity, price, note)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (order_id, item_data['menu_item_id'], item_data['quantity'],
+              item_data['price'], item_data['note']))
+
     conn.commit()
     conn.close()
 
@@ -393,4 +393,3 @@ setup_enhanced_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
