@@ -453,6 +453,24 @@ def setup_payment_endpoints(app: FastAPI):
         finally:
             conn.close()
     
+    @app.get("/api/settings/maybank_qr_url")
+    async def get_maybank_qr():
+        """Get Maybank QR code URL"""
+        conn = get_db_connection()
+
+        try:
+            result = conn.execute("""
+                SELECT qr_code_url FROM payment_methods
+                WHERE method_name = 'maybank' AND is_active = 1
+            """).fetchone()
+
+            if result and result['qr_code_url']:
+                return {"value": result['qr_code_url']}
+            return {"value": None}
+
+        finally:
+            conn.close()
+
     @app.post("/api/settings/payment_method")
     async def update_payment_method(payment: PaymentMethodUpdate):
         """Update payment method QR code (admin only)"""

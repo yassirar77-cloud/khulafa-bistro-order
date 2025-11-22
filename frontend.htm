@@ -1010,7 +1010,7 @@
             document.getElementById('orderSummary').innerHTML = summaryHTML;
 
             try {
-                const response = await fetch(`${API_URL}/settings/payment_qr_url`);
+                const response = await fetch(`${API_URL}/settings/maybank_qr_url`);
                 const data = await response.json();
                 if (data.value) {
                     document.getElementById('qrImage').src = data.value;
