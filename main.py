@@ -199,9 +199,6 @@ async def create_order(order: CreateOrder):
         "order_number": order_number,
         "total_price": total_price
     }
-        "order_number": order_number,
-        "total_price": total_price
-    }
 
 @app.get("/api/orders/{order_id}")
 async def get_order(order_id: int):
