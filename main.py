@@ -11,6 +11,10 @@ import requests
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
+from threading import Thread
+from telegram import Update
+from telegram.ext import Application, CallbackQueryHandler, ContextTypes
+import asyncio
 
 # Telegram Bot Configuration
 BOT_TOKEN = "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78"
@@ -388,133 +392,119 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
                 files={'photo': photo}
             )
             print(f"Payment photo sent to group")
-    except Exception as e:
-        print(f"Error sending payment photo: {e}")
 
-    # Send confirmation to customer
-    customer_message = f"""✅ Payment Receipt Received!
+# Telegram Bot Handler for Buttons
+async def handle_telegram_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle button clicks from Telegram group"""
+    query = update.callback_query
+    await query.answer()
+    
+    callback_data = query.data
+    print(f"🔘 Button clicked: {callback_data}")
+    
+    try:
+        action, order_id = callback_data.split('_')
+        order_id = int(order_id)
+        
+        if action == "cancel":
+            print(f"Cancelling order {order_id}...")
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+            order = cursor.fetchone()
+            
+            if order:
+                cursor.execute('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
+                             ('cancelled', order_id))
+                conn.commit()
+                conn.close()
+                
+                # Notify customer
+                cancel_msg = f"""❌ Order Cancelled
 
-Thank you for your payment!
+We're sorry, your order has been cancelled.
 
-📋 Order Details:
 Order #: {order['order_number']}
 Total: RM{order['total_price']:.2f}
-Type: {order['order_type']}
 
-Your order is now being prepared! 🍳
+Reason: Payment not verified
 
-We will notify you when it's ready.
+Please contact us if you have questions.
+Khulafa Bistro 🌟"""
+                
+                send_message(order['customer_telegram_id'], cancel_msg)
+                await query.edit_message_text(text=f"{query.message.text}\n\n❌ ORDER CANCELLED ❌\nCustomer notified.")
+                print(f"✅ Order {order_id} cancelled")
+        
+        elif action == "remind":
+            print(f"Sending reminder for order {order_id}...")
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+            order = cursor.fetchone()
+            conn.close()
+            
+            if order:
+                reminder_msg = f"""🔔 Payment Reminder
 
-Thank you for choosing Khulafa Bistro! 🌟"""
+Hi {order['customer_name']},
+
+Your order is pending payment verification.
+
+Order #: {order['order_number']}
+Total: RM{order['total_price']:.2f}
+
+⚠️ Please upload your payment receipt ASAP.
+
+Thank you!
+Khulafa Bistro 🌟"""
+                
+                send_message(order['customer_telegram_id'], reminder_msg)
+                await query.edit_message_text(text=f"{query.message.text}\n\n🔔 REMINDER SENT ✅\nCustomer reminded.")
+                print(f"✅ Reminder sent for order {order_id}")
+        
+        elif action == "confirm":
+            print(f"Confirming order {order_id}...")
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE orders SET payment_confirmed = 1 WHERE id = ?', (order_id,))
+            conn.commit()
+            conn.close()
+            
+            await query.edit_message_text(text=f"{query.message.text}\n\n✅ ORDER CONFIRMED ✅\nPayment verified.")
+            print(f"✅ Order {order_id} confirmed")
     
-    try:
-        send_message(order['customer_telegram_id'], customer_message)
-        print(f"Confirmation sent to customer")
     except Exception as e:
-        print(f"Error sending customer confirmation: {e}")
+        print(f"❌ Error handling button: {e}")
+        await query.edit_message_text(text=f"{query.message.text}\n\n⚠️ Error: {str(e)}")
 
-    return {"success": True, "filepath": filepath, "message": "Payment received! You will be notified when your order is ready."}
-
-@app.get("/api/settings/{key}")
-async def get_setting(key: str):
-    """Get a setting value"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
-    result = cursor.fetchone()
-    conn.close()
-
-    if not result:
-        raise HTTPException(status_code=404, detail="Setting not found")
-
-    return {"key": key, "value": result['value']}
-
-@app.put("/api/settings/{key}")
-async def update_setting(key: str, value: str):
-    """Update a setting value"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
-    conn.commit()
-    conn.close()
-
-    return {"success": True, "key": key, "value": value}
-
-@app.post("/api/orders/{order_id}/status")
-async def update_order_status(order_id: int, update: UpdateOrderStatus):
-    """Update order status"""
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                   (update.status, order_id))
-    conn.commit()
-
-    # Get order details
-    cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
-    order = cursor.fetchone()
-    conn.close()
-
-    # Send notification to customer
-    if order:
-        send_customer_notification(order['customer_telegram_id'], order, update.status)
-
-    return {"success": True}
-
-@app.post("/api/orders/{order_id}/confirm_payment")
-async def confirm_payment(order_id: int):
-    """Confirm payment"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('UPDATE orders SET payment_confirmed = 1 WHERE id = ?', (order_id,))
-    conn.commit()
-    conn.close()
-
-    return {"success": True}
-
-# Telegram Helper Functions
-def send_message(chat_id, text, reply_markup=None):
-    """Send a Telegram message"""
-    url = f"{TELEGRAM_API}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML"
-    }
-    if reply_markup:
-        payload["reply_markup"] = json.dumps(reply_markup)
+# Run Telegram Bot in Background
+def run_telegram_bot():
+    """Run Telegram bot to handle button clicks"""
+    async def start_bot():
+        try:
+            app = Application.builder().token(BOT_TOKEN).build()
+            app.add_handler(CallbackQueryHandler(handle_telegram_buttons))
+            print("🤖 Telegram bot started - Ready to handle button clicks!")
+            await app.run_polling(allowed_updates=Update.ALL_TYPES)
+        except Exception as e:
+            print(f"❌ Bot error: {e}")
     
-    try:
-        response = requests.post(url, json=payload)
-        print(f"Telegram response: {response.text}")
-        return response.json()
-    except Exception as e:
-        print(f"Telegram error: {e}")
-        return None
-
-def send_customer_notification(customer_telegram_id: str, order, status: str):
-    """Send status update to customer"""
-    status_messages = {
-        "preparing": "🍳 Your order is being prepared!",
-        "ready": "✅ Your order is ready!",
-        "completed": "✅ Order completed. Thank you!"
-    }
-
-    message = status_messages.get(status, f"Status updated: {status}")
-    message += f"\n\nOrder: {order['order_number']}"
-    message += f"\nTotal: RM {order['total_price']:.2f}"
-
-    if status == "ready":
-        if order['order_type'] == "pickup":
-            message += "\n\n📍 Please come to collect your order!"
-        else:
-            message += "\n\n🍽️ Your table is ready! Please come in!"
-
-    send_message(customer_telegram_id, message)
+    # Run in new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_bot())
 
 # Setup all enhanced features
 setup_enhanced_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
+    
+    # Start bot in background thread
+    print("🚀 Starting Telegram bot in background...")
+    bot_thread = Thread(target=run_telegram_bot, daemon=True)
+    bot_thread.start()
+    
+    print("🚀 Starting FastAPI server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
