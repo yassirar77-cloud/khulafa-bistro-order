@@ -54,7 +54,7 @@ class PaymentMethodUpdate(BaseModel):
 # ============================================
 
 def get_db_connection():
-    conn = sqlite3.connect('khulafa_orders.db')
+    conn = sqlite3.connect('khulafa_bistro.db')
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -303,56 +303,43 @@ def setup_order_endpoints(app: FastAPI):
     async def get_order_history(customer_id: str):
         """Get order history for a customer"""
         conn = get_db_connection()
-        
+
         try:
+            # First get orders
             orders = conn.execute("""
-                SELECT o.*, 
-                       GROUP_CONCAT(
-                           json_object(
-                               'menu_item_id', oi.menu_item_id,
-                               'name', mi.name,
-                               'quantity', oi.quantity,
-                               'price', mi.price,
-                               'note', oi.note
-                           )
-                       ) as items_json
-                FROM orders o
-                LEFT JOIN order_items oi ON o.id = oi.order_id
-                LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-                WHERE o.customer_telegram_id = ?
-                GROUP BY o.id
-                ORDER BY o.created_at DESC
+                SELECT * FROM orders
+                WHERE customer_telegram_id = ?
+                ORDER BY created_at DESC
                 LIMIT 20
             """, (customer_id,)).fetchall()
-            
+
             result = []
             for order in orders:
                 order_dict = dict(order)
-                
-                # Parse items JSON
-                if order_dict['items_json']:
-                    items = []
-                    for item_str in order_dict['items_json'].split('},{'):
-                        item_str = item_str.strip('{}')
-                        # Simple JSON parsing
-                        item_dict = {}
-                        for pair in item_str.split('","'):
-                            pair = pair.strip('"')
-                            if ':' in pair:
-                                key, value = pair.split(':', 1)
-                                key = key.strip('"')
-                                value = value.strip('"')
-                                item_dict[key] = value
-                        items.append(item_dict)
-                    order_dict['items'] = items
-                else:
-                    order_dict['items'] = []
-                
-                del order_dict['items_json']
+
+                # Get items for this order
+                items = conn.execute("""
+                    SELECT oi.menu_item_id, mi.name, oi.quantity, mi.price, oi.note
+                    FROM order_items oi
+                    LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
+                    WHERE oi.order_id = ?
+                """, (order['id'],)).fetchall()
+
+                order_dict['items'] = [
+                    {
+                        'menu_item_id': item['menu_item_id'],
+                        'name': item['name'] or 'Unknown Item',
+                        'quantity': item['quantity'],
+                        'price': item['price'] or 0,
+                        'note': item['note']
+                    }
+                    for item in items
+                ]
+
                 result.append(order_dict)
-            
+
             return result
-            
+
         finally:
             conn.close()
     

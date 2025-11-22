@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime
 
 def migrate_database():
-    conn = sqlite3.connect('khulafa_orders.db')
+    conn = sqlite3.connect('khulafa_bistro.db')
     cursor = conn.cursor()
     
     print("Starting database migration...")
@@ -149,6 +149,30 @@ def migrate_database():
             except sqlite3.IntegrityError:
                 print(f"- Payment method {method} already exists")
         
+        # 8. Add payment_qr_url setting
+        print("\nAdding payment QR URL setting...")
+        try:
+            cursor.execute("""
+                INSERT INTO settings (key, value)
+                VALUES ('payment_qr_url', '/static/maybank-qr.jpg')
+            """)
+            print("✓ Added payment_qr_url setting")
+        except sqlite3.IntegrityError:
+            print("- payment_qr_url setting already exists")
+        except sqlite3.OperationalError:
+            # Settings table might not exist, create it
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            cursor.execute("""
+                INSERT OR REPLACE INTO settings (key, value)
+                VALUES ('payment_qr_url', '/static/maybank-qr.jpg')
+            """)
+            print("✓ Created settings table and added payment_qr_url")
+
         conn.commit()
         print("\n✅ Database migration completed successfully!")
         

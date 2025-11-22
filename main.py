@@ -25,7 +25,7 @@ app = FastAPI(title="Khulafa Bistro API")
 # Auto-run database migration on startup
 @app.on_event("startup")
 async def startup_event():
-    """Run database migration on startup"""
+    """Run database migration on startup and start Telegram bot"""
     try:
         print("Running database migration...")
         import migrate_database
@@ -33,6 +33,15 @@ async def startup_event():
         print("Migration completed!")
     except Exception as e:
         print(f"Migration error (may already be done): {e}")
+
+    # Start Telegram bot in background thread for button handling
+    try:
+        print("🚀 Starting Telegram bot in background...")
+        bot_thread = Thread(target=run_telegram_bot, daemon=True)
+        bot_thread.start()
+        print("✅ Telegram bot started!")
+    except Exception as e:
+        print(f"❌ Error starting Telegram bot: {e}")
 
 # CORS - Allow Telegram Mini App
 app.add_middleware(
@@ -623,11 +632,5 @@ setup_enhanced_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
-    
-    # Start bot in background thread
-    print("🚀 Starting Telegram bot in background...")
-    bot_thread = Thread(target=run_telegram_bot, daemon=True)
-    bot_thread.start()
-    
     print("🚀 Starting FastAPI server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
