@@ -1,5 +1,7 @@
-fastapi
-uvicorn[standard]
-python-multipart
-requests
-pydantic
+fastapi==0.104.1
+uvicorn==0.24.0
+python-telegram-bot==20.7
+pydantic==2.5.0
+python-multipart==0.0.6
+requests==2.31.0
+aiohttp==3.9.1
