@@ -168,7 +168,7 @@ async def create_order(order: CreateOrder):
     conn.commit()
     conn.close()
 
-    # Send order to Telegram group
+    # Send order to Telegram group WITH BUTTONS
     order_text = f"🆕 NEW ORDER!\n\n"
     order_text += f"Order #: {order_number}\n"
     order_text += f"Customer: {order.customer_name}\n"
@@ -189,9 +189,43 @@ async def create_order(order: CreateOrder):
     
     order_text += f"\nTOTAL: RM{total_price:.2f}"
     
-    print(f"Sending order to Telegram group...")
-    send_message(-1003483753298, order_text)
-    print(f"Order sent to group!")
+    # Create inline keyboard with action buttons
+    inline_keyboard = {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "✅ Confirm Order",
+                    "callback_data": f"confirm_{order_id}"
+                },
+                {
+                    "text": "❌ Cancel Order",
+                    "callback_data": f"cancel_{order_id}"
+                }
+            ],
+            [
+                {
+                    "text": "🔔 Remind Payment",
+                    "callback_data": f"remind_{order_id}"
+                }
+            ]
+        ]
+    }
+    
+    print(f"Sending order to Telegram group with action buttons...")
+    
+    # Send message with buttons
+    url = f"{TELEGRAM_API}/sendMessage"
+    payload = {
+        "chat_id": -1003483753298,
+        "text": order_text,
+        "reply_markup": inline_keyboard
+    }
+    
+    try:
+        response = requests.post(url, json=payload)
+        print(f"Order sent to group with buttons: {response.text}")
+    except Exception as e:
+        print(f"Error sending order: {e}")
 
     return {
         "success": True,
@@ -228,6 +262,96 @@ async def get_order(order_id: int):
         "order": dict(order),
         "items": [dict(item) for item in items]
     }
+
+# NEW FEATURE: Cancel Order
+@app.post("/api/orders/{order_id}/cancel")
+async def cancel_order(order_id: int):
+    """Cancel an order - for fake or unpaid receipts"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get order details
+    cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+    order = cursor.fetchone()
+    
+    if not order:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Update order status to cancelled
+    cursor.execute('''
+        UPDATE orders 
+        SET status = 'cancelled', 
+            updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+    ''', (order_id,))
+    conn.commit()
+    conn.close()
+    
+    # Send cancellation notice to customer
+    cancel_message = f"""❌ Order Cancelled
+
+We're sorry, but your order has been cancelled.
+
+Order #: {order['order_number']}
+Total: RM{order['total_price']:.2f}
+
+Reason: Payment not verified
+
+If you believe this is an error or have already paid, please contact us directly with your payment proof.
+
+Thank you for your understanding.
+Khulafa Bistro 🌟"""
+    
+    try:
+        send_message(order['customer_telegram_id'], cancel_message)
+        print(f"✅ Cancellation notice sent to customer")
+    except Exception as e:
+        print(f"Error sending cancellation notice: {e}")
+    
+    return {"success": True, "message": "Order cancelled successfully"}
+
+# NEW FEATURE: Remind Payment
+@app.post("/api/orders/{order_id}/remind")
+async def remind_payment(order_id: int):
+    """Send payment reminder to customer"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+    order = cursor.fetchone()
+    
+    if not order:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    conn.close()
+    
+    # Send payment reminder to customer
+    reminder_message = f"""🔔 Payment Reminder
+
+Hi {order['customer_name']},
+
+We noticed your order is still pending payment verification.
+
+📋 Order Details:
+Order #: {order['order_number']}
+Total: RM{order['total_price']:.2f}
+Type: {order['order_type']}
+
+⚠️ Please upload your payment receipt as soon as possible.
+
+If you have already paid, please upload a clear screenshot of your payment confirmation in the chat.
+
+Thank you for choosing Khulafa Bistro! 🌟"""
+    
+    try:
+        send_message(order['customer_telegram_id'], reminder_message)
+        print(f"✅ Payment reminder sent to customer")
+        return {"success": True, "message": "Payment reminder sent successfully"}
+    except Exception as e:
+        print(f"Error sending payment reminder: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send reminder")
 
 @app.post("/api/orders/{order_id}/upload_payment")
 async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
@@ -393,3 +517,4 @@ setup_enhanced_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
