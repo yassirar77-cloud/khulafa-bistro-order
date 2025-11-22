@@ -1705,34 +1705,30 @@
 
             document.getElementById('orderSummary').innerHTML = summaryHTML;
 
-            // Load payment QR codes
+            // Load payment QR codes - Use static fallback if API fails
             try {
-                // Maybank QR
-                const maybankResponse = await fetch(`${API_URL}/settings/payment_qr_url`);
-                const maybankData = await maybankResponse.json();
-                if (maybankData.value) {
-                    document.getElementById('maybankQR').src = maybankData.value;
+                // Maybank QR - try API first, fallback to static file
+                const maybankQR = document.getElementById('maybankQR');
+                try {
+                    const maybankResponse = await fetch(`${API_URL}/settings/payment_qr_url`);
+                    if (maybankResponse.ok) {
+                        const maybankData = await maybankResponse.json();
+                        if (maybankData.value) {
+                            maybankQR.src = maybankData.value;
+                        }
+                    }
+                } catch (e) {
+                    console.log('Using default Maybank QR');
                 }
-
-                // TnG QR (you'll need to add this to your backend settings)
-                const tngResponse = await fetch(`${API_URL}/settings/tng_qr_url`);
-                const tngData = await tngResponse.json();
-                if (tngData.value) {
-                    document.getElementById('tngQR').src = tngData.value;
-                } else {
-                    document.getElementById('tngQR').src = maybankData.value; // Fallback to Maybank
-                }
-
-                // GrabPay QR (you'll need to add this to your backend settings)
-                const grabpayResponse = await fetch(`${API_URL}/settings/grabpay_qr_url`);
-                const grabpayData = await grabpayResponse.json();
-                if (grabpayData.value) {
-                    document.getElementById('grabpayQR').src = grabpayData.value;
-                } else {
-                    document.getElementById('grabpayQR').src = maybankData.value; // Fallback to Maybank
+                // Ensure fallback to static file if src is empty
+                if (!maybankQR.src || maybankQR.src === window.location.href) {
+                    maybankQR.src = '/static/maybank-qr.jpg';
                 }
             } catch (error) {
                 console.log('Error loading QR codes:', error);
+                // Ensure QR image has fallback
+                const maybankQR = document.getElementById('maybankQR');
+                if (maybankQR) maybankQR.src = '/static/maybank-qr.jpg';
             }
 
             if (tg.initDataUnsafe.user) {
