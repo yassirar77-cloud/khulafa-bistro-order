@@ -22,17 +22,36 @@ TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 app = FastAPI(title="Khulafa Bistro API")
 
-# Auto-run database migration on startup
+# Auto-run database migration and bot initialization on startup
 @app.on_event("startup")
 async def startup_event():
-    """Run database migration on startup"""
+    """Run database migration and initialize bot on startup"""
     try:
         print("Running database migration...")
         import migrate_database
         migrate_database.migrate_database()
         print("Migration completed!")
+        
+        # Initialize Telegram bot
+        await init_telegram_bot()
     except Exception as e:
-        print(f"Migration error (may already be done): {e}")
+        print(f"Startup error: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Properly shutdown the Telegram bot on shutdown
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown the Telegram bot properly"""
+    global bot_app
+    try:
+        if bot_app:
+            await bot_app.shutdown()
+            print("🤖 Telegram bot shutdown successfully!")
+    except Exception as e:
+        print(f"Shutdown error: {e}")
+        import traceback
+        traceback.print_exc()
 
 # CORS - Allow Telegram Mini App
 app.add_middleware(
@@ -601,22 +620,23 @@ Khulafa Bistro 🌟"""
         print(f"❌ Error handling button: {e}")
         await query.edit_message_text(text=f"{query.message.text}\n\n⚠️ Error: {str(e)}")
 
-# Run Telegram Bot in Background
-def run_telegram_bot():
-    """Run Telegram bot to handle button clicks"""
-    async def start_bot():
-        try:
-            app = Application.builder().token(BOT_TOKEN).build()
-            app.add_handler(CallbackQueryHandler(handle_telegram_buttons))
-            print("🤖 Telegram bot started - Ready to handle button clicks!")
-            await app.run_polling(allowed_updates=Update.ALL_TYPES)
-        except Exception as e:
-            print(f"❌ Bot error: {e}")
-    
-    # Run in new event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(start_bot())
+# Global variable to store the bot application
+bot_app = None
+
+# Initialize Telegram Bot
+async def init_telegram_bot():
+    """Initialize Telegram bot for button handling"""
+    global bot_app
+    try:
+        bot_app = Application.builder().token(BOT_TOKEN).build()
+        bot_app.add_handler(CallbackQueryHandler(handle_telegram_buttons))
+        await bot_app.initialize()
+        await bot_app.start()
+        print("🤖 Telegram bot initialized - Ready to handle button clicks!")
+    except Exception as e:
+        print(f"❌ Bot initialization error: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Setup all enhanced features
 setup_enhanced_routes(app)
@@ -624,10 +644,6 @@ setup_enhanced_routes(app)
 if __name__ == "__main__":
     import uvicorn
     
-    # Start bot in background thread
-    print("🚀 Starting Telegram bot in background...")
-    bot_thread = Thread(target=run_telegram_bot, daemon=True)
-    bot_thread.start()
-    
     print("🚀 Starting FastAPI server...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
