@@ -1,6 +1,7 @@
 fastapi[standard]
 uvicorn[standard]
-python-telegram-bot
+python-telegram-bot>=21.0
+typing_extensions>=4.7.0
 python-dotenv
 aiohttp
 requests

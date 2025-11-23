@@ -615,13 +615,19 @@ def run_telegram_bot():
     """Run Telegram bot to handle button clicks"""
     async def start_bot():
         try:
-            app = Application.builder().token(BOT_TOKEN).build()
-            app.add_handler(CallbackQueryHandler(handle_telegram_buttons))
+            application = Application.builder().token(BOT_TOKEN).build()
+            application.add_handler(CallbackQueryHandler(handle_telegram_buttons))
             print("🤖 Telegram bot started - Ready to handle button clicks!")
-            await app.run_polling(allowed_updates=Update.ALL_TYPES)
+            # Use stop_signals=None to avoid signal handler issues in background thread
+            await application.initialize()
+            await application.start()
+            await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            # Keep running
+            while True:
+                await asyncio.sleep(1)
         except Exception as e:
             print(f"❌ Bot error: {e}")
-    
+
     # Run in new event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
