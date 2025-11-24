@@ -817,6 +817,112 @@
             animation: downloadBounce 1s ease-in-out infinite;
         }
 
+        /* Expandable QR Code Styles */
+        .qr-clickable {
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .qr-clickable:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+
+        .qr-clickable:active {
+            transform: scale(0.98);
+        }
+
+        .qr-tap-hint {
+            margin-top: 12px;
+            color: #718096;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .qr-tap-hint i {
+            color: var(--primary);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
+
+        /* QR Expanded Modal Overlay */
+        .qr-expanded-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .qr-expanded-overlay.active {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .qr-expanded-image {
+            max-width: 90%;
+            max-height: 70vh;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            animation: zoomIn 0.3s ease;
+        }
+
+        @keyframes zoomIn {
+            from {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .qr-expanded-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: none;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .qr-expanded-close:hover {
+            transform: scale(1.1);
+        }
+
+        .qr-expanded-hint {
+            color: white;
+            margin-top: 20px;
+            font-size: 16px;
+            text-align: center;
+            opacity: 0.9;
+        }
+
         .upload-area {
             border: 2px dashed var(--primary);
             border-radius: 12px;
@@ -1319,11 +1425,8 @@
                         <h3 class="qr-title">
                             <i class="fas fa-qrcode"></i> Scan to Pay with Maybank
                         </h3>
-                        <img id="maybankQR" class="qr-image" src="/static/maybank-qr.jpg" alt="Maybank QR Code">
-                        <p style="margin-top: 10px; color: var(--light-text);">Scan with Maybank app</p>
-                        <button onclick="downloadQRCode('maybank')" class="download-btn">
-                            <i class="fas fa-download"></i> Download QR
-                        </button>
+                        <img id="maybankQR" class="qr-image qr-clickable" src="/static/maybank-qr.jpg" alt="Maybank QR Code" onclick="expandQR(this)">
+                        <p class="qr-tap-hint"><i class="fas fa-expand"></i> Tap QR to expand for easy screenshot</p>
                     </div>
                 </div>
 
@@ -1414,6 +1517,15 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- QR Expanded Overlay -->
+    <div class="qr-expanded-overlay" id="qrExpandedOverlay" onclick="closeExpandedQR(event)">
+        <button class="qr-expanded-close" onclick="closeExpandedQR(event)">
+            <i class="fas fa-times"></i>
+        </button>
+        <img id="qrExpandedImage" class="qr-expanded-image" src="" alt="Expanded QR Code">
+        <p class="qr-expanded-hint"><i class="fas fa-camera"></i> Take a screenshot now to pay easily!</p>
     </div>
 
     <script>
@@ -1808,7 +1920,7 @@
         function downloadQRCode(method) {
             try {
                 const qrImage = document.getElementById(`${method}QR`);
-                
+
                 if (!qrImage || !qrImage.src) {
                     tg.showAlert('QR code not available!');
                     return;
@@ -1820,11 +1932,34 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 tg.showAlert('QR Code downloaded successfully!');
             } catch (error) {
                 console.error('Download error:', error);
                 tg.showAlert('Could not download QR code. Please take a screenshot instead.');
+            }
+        }
+
+        // Expand QR code for easy screenshot
+        function expandQR(imgElement) {
+            const overlay = document.getElementById('qrExpandedOverlay');
+            const expandedImg = document.getElementById('qrExpandedImage');
+
+            if (imgElement && imgElement.src) {
+                expandedImg.src = imgElement.src;
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden'; // Prevent scrolling
+            }
+        }
+
+        // Close expanded QR overlay
+        function closeExpandedQR(event) {
+            // Only close if clicking on overlay background or close button, not on the image
+            if (event.target.id === 'qrExpandedOverlay' ||
+                event.target.closest('.qr-expanded-close')) {
+                const overlay = document.getElementById('qrExpandedOverlay');
+                overlay.classList.remove('active');
+                document.body.style.overflow = ''; // Restore scrolling
             }
         }
 
