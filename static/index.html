@@ -53,9 +53,12 @@
 
         .header-actions {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
             margin-bottom: 10px;
+            width: 100%;
+            position: relative;
+            z-index: 101;
         }
 
         .history-btn {
@@ -69,6 +72,14 @@
             display: flex;
             align-items: center;
             gap: 5px;
+            position: relative;
+            z-index: 101;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .history-btn:active {
+            background: rgba(255,255,255,0.4);
+            transform: scale(0.95);
         }
 
         .logo {
@@ -1946,13 +1957,29 @@
         }
 
         async function showHistory() {
-            document.getElementById('historyModal').classList.add('show');
+            console.log('showHistory called');
+            const modal = document.getElementById('historyModal');
+            if (!modal) {
+                console.error('historyModal not found!');
+                alert('Error: History modal not found');
+                return;
+            }
+
+            modal.classList.add('show');
+            console.log('Modal show class added');
+
             const container = document.getElementById('historyContainer');
 
             try {
-                const userId = tg.initDataUnsafe.user?.id?.toString() || 'unknown';
+                // Make sure tg is initialized
+                if (!tg) {
+                    initTelegram();
+                }
+                const userId = tg.initDataUnsafe?.user?.id?.toString() || 'unknown';
+                console.log('Fetching history for user:', userId);
                 const response = await fetch(`${API_URL}/orders/history/${userId}`);
                 const orders = await response.json();
+                console.log('Orders received:', orders);
 
                 if (orders.length === 0) {
                     container.innerHTML = '<div class="empty-cart"><i class="fas fa-receipt"></i><p>No order history yet</p></div>';
@@ -2023,6 +2050,14 @@
 
         document.getElementById('searchInput').addEventListener('input', (e) => {
             renderMenu(e.target.value);
+        });
+
+        // History button click handler
+        document.querySelector('.history-btn').addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('History button clicked');
+            showHistory();
         });
 
         // Load menu after everything is ready
