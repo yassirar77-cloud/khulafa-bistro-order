@@ -2040,9 +2040,9 @@
         async function showHistory() {
             document.getElementById('historyModal').classList.add('show');
             const container = document.getElementById('historyContainer');
-            
+
             try {
-                const userId = tg.initDataUnsafe.user?.id || 'unknown';
+                const userId = tg.initDataUnsafe.user?.id?.toString() || 'unknown';
                 const response = await fetch(`${API_URL}/orders/history/${userId}`);
                 const orders = await response.json();
 
@@ -2102,9 +2102,9 @@
         async function showTracking() {
             document.getElementById('trackingModal').classList.add('show');
             const container = document.getElementById('trackingContainer');
-            
+
             try {
-                const userId = tg.initDataUnsafe.user?.id || 'unknown';
+                const userId = tg.initDataUnsafe.user?.id?.toString() || 'unknown';
                 const response = await fetch(`${API_URL}/orders/latest/${userId}`);
                 const order = await response.json();
 
