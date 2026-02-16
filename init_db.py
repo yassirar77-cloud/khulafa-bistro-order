@@ -319,8 +319,13 @@ def init_database():
         ("Onion Ring", "WESTERN", 6.00),
     ]
 
-    # Insert menu items
-    cursor.executemany('INSERT INTO menu_items (name, category, price) VALUES (?, ?, ?)', menu_data)
+    # Insert menu items only if the table is empty (avoid duplicates on restart)
+    cursor.execute('SELECT COUNT(*) FROM menu_items')
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany('INSERT INTO menu_items (name, category, price) VALUES (?, ?, ?)', menu_data)
+        print(f"Inserted {len(menu_data)} menu items.")
+    else:
+        print("Menu items already exist, skipping insert.")
 
     # Insert default settings
     cursor.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',

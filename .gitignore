@@ -1,0 +1,10 @@
+# Database files (auto-created on startup)
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env

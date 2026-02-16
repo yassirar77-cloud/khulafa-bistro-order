@@ -31,7 +31,17 @@ voice_ai = VoiceAI()
 # Auto-run database migration on startup
 @app.on_event("startup")
 async def startup_event():
-    """Run database migration on startup and start Telegram bot"""
+    """Initialize database and run migrations on startup, then start Telegram bot"""
+    # First, initialize the database (creates base tables + menu items)
+    try:
+        print("Initializing database...")
+        import init_db
+        init_db.init_database()
+        print("Database initialized!")
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+
+    # Then run migrations (adds columns, extra tables, seed data)
     try:
         print("Running database migration...")
         import migrate_database
