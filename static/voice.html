@@ -43,6 +43,33 @@
             margin-top: 6px;
         }
 
+        .voice-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 8px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .voice-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2ecc71;
+        }
+
+        .voice-status .dot.speaking {
+            background: #f39c12;
+            animation: blink 0.6s infinite alternate;
+        }
+
+        @keyframes blink {
+            from { opacity: 1; }
+            to { opacity: 0.3; }
+        }
+
         .chat-area {
             flex: 1;
             overflow-y: auto;
@@ -147,10 +174,22 @@
             animation: pulse 1.5s infinite;
         }
 
+        .mic-btn.speaking {
+            background: #f39c12;
+            color: #fff;
+            animation: speakPulse 1s infinite;
+        }
+
         @keyframes pulse {
             0% { box-shadow: 0 0 0 0 rgba(231,76,60,0.4); }
             70% { box-shadow: 0 0 0 20px rgba(231,76,60,0); }
             100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+        }
+
+        @keyframes speakPulse {
+            0% { box-shadow: 0 0 0 0 rgba(243,156,18,0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(243,156,18,0); }
+            100% { box-shadow: 0 0 0 0 rgba(243,156,18,0); }
         }
 
         .mic-label {
@@ -248,6 +287,10 @@
         <div class="header">
             <h1>Khulafa Bistro</h1>
             <div class="table-badge" id="tableBadge">Table --</div>
+            <div class="voice-status" id="voiceStatus">
+                <div class="dot" id="statusDot"></div>
+                <span id="statusText">Ready</span>
+            </div>
         </div>
 
         <div class="chat-area" id="chatArea"></div>
@@ -284,19 +327,233 @@
         let chatHistory = [];
         let currentItems = [];
         let isListening = false;
+        let isSpeaking = false;
         let recognition = null;
         let orderSubmitted = false;
+        let currentAudio = null;
+        let autoListenEnabled = false;
 
-        // Speech Recognition setup
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        // =============================================
+        // PART 1: Google Translate TTS (FREE)
+        // =============================================
+
+        function detectLanguage(text) {
+            // Check for common Malay words/patterns
+            var malayWords = [
+                'saya', 'nak', 'mau', 'boleh', 'terima', 'kasih', 'selamat',
+                'datang', 'order', 'tambah', 'lagi', 'cukup', 'dah', 'sudah',
+                'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh',
+                'lapan', 'sembilan', 'sepuluh', 'meja', 'makan', 'minum',
+                'apa', 'ini', 'itu', 'ada', 'tak', 'tidak', 'ya', 'baik',
+                'hari', 'pagi', 'petang', 'malam', 'anda', 'awak', 'kita',
+                'dengan', 'dan', 'atau', 'untuk', 'ke', 'di', 'yang',
+                'nasi', 'roti', 'ayam', 'ikan', 'teh', 'kopi', 'air',
+                'goreng', 'rebus', 'panggang', 'sambal', 'kuah',
+                'ringgit', 'harga', 'jumlah', 'semua', 'sahaja',
+                'tunggu', 'sila', 'tolong', 'hantar', 'confirm'
+            ];
+            var lowerText = text.toLowerCase();
+            var malayCount = 0;
+            for (var i = 0; i < malayWords.length; i++) {
+                if (lowerText.indexOf(malayWords[i]) !== -1) {
+                    malayCount++;
+                }
+            }
+            // If 2+ Malay words found, treat as Malay
+            return malayCount >= 2 ? 'ms' : 'en';
+        }
+
+        function splitIntoChunks(text, maxLen) {
+            // Split long text into sentence chunks for Google TTS (max ~200 chars per request)
+            if (text.length <= maxLen) return [text];
+
+            var chunks = [];
+            // Split by sentence-ending punctuation
+            var sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+            var current = '';
+
+            for (var i = 0; i < sentences.length; i++) {
+                var sentence = sentences[i].trim();
+                if (!sentence) continue;
+
+                if ((current + ' ' + sentence).trim().length <= maxLen) {
+                    current = (current + ' ' + sentence).trim();
+                } else {
+                    if (current) chunks.push(current);
+                    // If single sentence is too long, split by commas
+                    if (sentence.length > maxLen) {
+                        var parts = sentence.split(/,\s*/);
+                        var part = '';
+                        for (var j = 0; j < parts.length; j++) {
+                            if ((part + ', ' + parts[j]).trim().length <= maxLen) {
+                                part = (part ? part + ', ' : '') + parts[j];
+                            } else {
+                                if (part) chunks.push(part);
+                                part = parts[j];
+                            }
+                        }
+                        current = part;
+                    } else {
+                        current = sentence;
+                    }
+                }
+            }
+            if (current) chunks.push(current);
+            return chunks;
+        }
+
+        function speak(text, autoListenAfter) {
+            // Stop any currently playing audio
+            stopSpeaking();
+
+            if (!text || text.trim().length === 0) {
+                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
+                    setTimeout(function() { startListening(); }, 300);
+                }
+                return Promise.resolve();
+            }
+
+            var lang = detectLanguage(text);
+            var tl = (lang === 'ms') ? 'ms' : 'en';
+            var chunks = splitIntoChunks(text, 200);
+
+            setSpeakingState(true);
+
+            return playChunks(chunks, tl, 0).then(function() {
+                setSpeakingState(false);
+                // After speech finishes, auto-start listening if enabled
+                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
+                    setTimeout(function() { startListening(); }, 500);
+                }
+            }).catch(function(err) {
+                console.warn('TTS error, falling back to speechSynthesis:', err);
+                setSpeakingState(false);
+                // Fallback to browser speechSynthesis
+                fallbackSpeak(text, lang, autoListenAfter);
+            });
+        }
+
+        function playChunks(chunks, lang, index) {
+            if (index >= chunks.length) return Promise.resolve();
+
+            return new Promise(function(resolve, reject) {
+                var chunk = chunks[index];
+                var url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=' +
+                    lang + '&client=tw-ob&q=' + encodeURIComponent(chunk);
+
+                currentAudio = new Audio(url);
+                currentAudio.playbackRate = 1.1;
+
+                currentAudio.onended = function() {
+                    currentAudio = null;
+                    // Small gap between chunks
+                    setTimeout(function() {
+                        playChunks(chunks, lang, index + 1).then(resolve).catch(reject);
+                    }, 100);
+                };
+
+                currentAudio.onerror = function(e) {
+                    currentAudio = null;
+                    reject(e);
+                };
+
+                currentAudio.play().catch(function(e) {
+                    currentAudio = null;
+                    reject(e);
+                });
+            });
+        }
+
+        function stopSpeaking() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                currentAudio = null;
+            }
+            // Also cancel any fallback speechSynthesis
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+            setSpeakingState(false);
+        }
+
+        function fallbackSpeak(text, lang, autoListenAfter) {
+            // Browser speechSynthesis as fallback
+            if (!('speechSynthesis' in window)) {
+                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
+                    setTimeout(function() { startListening(); }, 500);
+                }
+                return;
+            }
+            window.speechSynthesis.cancel();
+            var utter = new SpeechSynthesisUtterance(text);
+            utter.lang = (lang === 'ms') ? 'ms-MY' : 'en-MY';
+            utter.rate = 1.0;
+
+            setSpeakingState(true);
+
+            utter.onend = function() {
+                setSpeakingState(false);
+                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
+                    setTimeout(function() { startListening(); }, 500);
+                }
+            };
+            utter.onerror = function() {
+                setSpeakingState(false);
+                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
+                    setTimeout(function() { startListening(); }, 500);
+                }
+            };
+            window.speechSynthesis.speak(utter);
+        }
+
+        function setSpeakingState(speaking) {
+            isSpeaking = speaking;
+            var micBtn = document.getElementById('micBtn');
+            var statusDot = document.getElementById('statusDot');
+            var statusText = document.getElementById('statusText');
+
+            if (speaking) {
+                micBtn.classList.add('speaking');
+                micBtn.classList.remove('listening');
+                document.getElementById('micIcon').innerHTML = '&#x1F50A;';
+                document.getElementById('micLabel').textContent = 'Aisha speaking...';
+                statusDot.classList.add('speaking');
+                statusText.textContent = 'Speaking';
+            } else {
+                micBtn.classList.remove('speaking');
+                if (!isListening) {
+                    document.getElementById('micIcon').innerHTML = '&#x1F3A4;';
+                    document.getElementById('micLabel').textContent = 'Tap to speak';
+                    statusDot.classList.remove('speaking');
+                    statusText.textContent = 'Ready';
+                }
+            }
+        }
+
+        // =============================================
+        // PART 4: Better Voice Recognition
+        // =============================================
+
+        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
             recognition.lang = 'ms-MY';
             recognition.continuous = false;
             recognition.interimResults = false;
+            recognition.maxAlternatives = 3;
 
             recognition.onresult = function(e) {
-                const text = e.results[0][0].transcript;
+                // Pick the best transcript from alternatives
+                var text = e.results[0][0].transcript;
+                var confidence = e.results[0][0].confidence;
+
+                // Log alternatives for debugging
+                for (var i = 0; i < e.results[0].length; i++) {
+                    console.log('Alt ' + i + ':', e.results[0][i].transcript,
+                        '(' + (e.results[0][i].confidence * 100).toFixed(1) + '%)');
+                }
+
                 stopListening();
                 sendMessage(text);
             };
@@ -305,7 +562,14 @@
                 console.error('Speech error:', e.error);
                 stopListening();
                 if (e.error === 'no-speech') {
-                    addSystemMsg('No speech detected. Tap mic and try again.');
+                    addSystemMsg('Tak dengar suara. Cuba lagi.');
+                    // Auto-retry listening after no-speech
+                    if (autoListenEnabled && !orderSubmitted) {
+                        setTimeout(function() { startListening(); }, 1000);
+                    }
+                } else if (e.error === 'not-allowed') {
+                    addSystemMsg('Mic access denied. Please allow microphone permission.');
+                    autoListenEnabled = false;
                 }
             };
 
@@ -316,10 +580,19 @@
 
         function toggleMic() {
             if (orderSubmitted) return;
+
+            // If speaking, stop the speech first
+            if (isSpeaking) {
+                stopSpeaking();
+                return;
+            }
+
             if (isListening) {
                 recognition.stop();
                 stopListening();
+                autoListenEnabled = false; // Manual stop disables auto-listen
             } else {
+                autoListenEnabled = true; // Manual start enables auto-listen
                 startListening();
             }
         }
@@ -329,9 +602,17 @@
                 addSystemMsg('Speech recognition not supported. Please type your order.');
                 return;
             }
+            if (isListening || isSpeaking || orderSubmitted) return;
+
             isListening = true;
-            document.getElementById('micBtn').classList.add('listening');
+            var micBtn = document.getElementById('micBtn');
+            micBtn.classList.add('listening');
+            micBtn.classList.remove('speaking');
+            document.getElementById('micIcon').innerHTML = '&#x1F3A4;';
             document.getElementById('micLabel').textContent = 'Listening...';
+            document.getElementById('statusDot').classList.remove('speaking');
+            document.getElementById('statusText').textContent = 'Listening';
+
             try {
                 recognition.start();
             } catch (e) {
@@ -341,13 +622,22 @@
 
         function stopListening() {
             isListening = false;
-            document.getElementById('micBtn').classList.remove('listening');
-            document.getElementById('micLabel').textContent = 'Tap to speak';
+            var micBtn = document.getElementById('micBtn');
+            micBtn.classList.remove('listening');
+            if (!isSpeaking) {
+                document.getElementById('micIcon').innerHTML = '&#x1F3A4;';
+                document.getElementById('micLabel').textContent = 'Tap to speak';
+                document.getElementById('statusText').textContent = 'Ready';
+            }
         }
 
+        // =============================================
+        // Chat & Message Functions
+        // =============================================
+
         function addMsg(text, role) {
-            const chatArea = document.getElementById('chatArea');
-            const div = document.createElement('div');
+            var chatArea = document.getElementById('chatArea');
+            var div = document.createElement('div');
             div.className = 'msg ' + role;
             div.textContent = text;
             chatArea.appendChild(div);
@@ -359,8 +649,8 @@
         }
 
         function showLoading() {
-            const chatArea = document.getElementById('chatArea');
-            const div = document.createElement('div');
+            var chatArea = document.getElementById('chatArea');
+            var div = document.createElement('div');
             div.className = 'msg ai';
             div.id = 'loadingMsg';
             div.innerHTML = '<span class="loading">Aisha is typing</span>';
@@ -369,18 +659,8 @@
         }
 
         function removeLoading() {
-            const el = document.getElementById('loadingMsg');
+            var el = document.getElementById('loadingMsg');
             if (el) el.remove();
-        }
-
-        function speak(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const utter = new SpeechSynthesisUtterance(text);
-                utter.lang = 'ms-MY';
-                utter.rate = 1.0;
-                window.speechSynthesis.speak(utter);
-            }
         }
 
         function renderOrderSummary(items) {
@@ -390,10 +670,10 @@
                 return;
             }
 
-            let total = 0;
-            let html = '<div class="order-summary"><h3>Order Summary</h3>';
+            var total = 0;
+            var html = '<div class="order-summary"><h3>Order Summary</h3>';
             items.forEach(function(item) {
-                const lineTotal = item.price * item.quantity;
+                var lineTotal = item.price * item.quantity;
                 total += lineTotal;
                 html += '<div class="item"><span>' + item.name + ' x' + item.quantity + '</span><span>RM' + lineTotal.toFixed(2) + '</span></div>';
             });
@@ -401,6 +681,10 @@
 
             document.getElementById('orderSummaryContainer').innerHTML = html;
         }
+
+        // =============================================
+        // PART 3: Continuous Flow - Send & Auto-Listen
+        // =============================================
 
         async function sendMessage(text) {
             if (orderSubmitted) return;
@@ -410,7 +694,7 @@
             showLoading();
 
             try {
-                const res = await fetch('/api/voice/chat', {
+                var res = await fetch('/api/voice/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -420,12 +704,10 @@
                     })
                 });
 
-                const data = await res.json();
+                var data = await res.json();
                 removeLoading();
 
                 addMsg(data.response, 'ai');
-                speak(data.response);
-
                 chatHistory.push({ role: 'assistant', content: data.response });
 
                 if (data.extracted_items && data.extracted_items.length > 0) {
@@ -436,16 +718,25 @@
                 if (data.order_confirmed && currentItems.length > 0) {
                     document.getElementById('confirmBtn').classList.add('show');
                 }
+
+                // Speak the response, then auto-listen after it finishes
+                var shouldAutoListen = !data.order_confirmed;
+                speak(data.response, shouldAutoListen);
+
             } catch (err) {
                 removeLoading();
                 addMsg('Connection error. Please try again.', 'system');
                 console.error(err);
+                // Auto-retry listening on error
+                if (autoListenEnabled && !orderSubmitted) {
+                    setTimeout(function() { startListening(); }, 1500);
+                }
             }
         }
 
         function sendText() {
-            const input = document.getElementById('textInput');
-            const text = input.value.trim();
+            var input = document.getElementById('textInput');
+            var text = input.value.trim();
             if (!text) return;
             input.value = '';
             sendMessage(text);
@@ -454,7 +745,7 @@
         async function submitOrder() {
             if (orderSubmitted || currentItems.length === 0) return;
 
-            const total = currentItems.reduce(function(sum, item) {
+            var total = currentItems.reduce(function(sum, item) {
                 return sum + item.price * item.quantity;
             }, 0);
 
@@ -462,7 +753,7 @@
             document.getElementById('confirmBtn').disabled = true;
 
             try {
-                const res = await fetch('/api/voice/submit-order', {
+                var res = await fetch('/api/voice/submit-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -472,12 +763,13 @@
                     })
                 });
 
-                const data = await res.json();
+                var data = await res.json();
 
                 if (data.success) {
                     orderSubmitted = true;
+                    autoListenEnabled = false;
                     document.getElementById('successOverlay').classList.add('show');
-                    speak('Terima kasih! Order dah dihantar ke cashier.');
+                    speak('Terima kasih! Order dah dihantar ke cashier. Sila tunggu ya.', false);
                 } else {
                     document.getElementById('confirmBtn').textContent = 'Confirm Order';
                     document.getElementById('confirmBtn').disabled = false;
@@ -491,14 +783,35 @@
             }
         }
 
-        // Auto-greet on page load
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                const greeting = 'Selamat datang ke Khulafa Bistro! Saya Aisha. Nak order apa hari ni?';
-                addMsg(greeting, 'ai');
-                speak(greeting);
-                chatHistory.push({ role: 'assistant', content: greeting });
-            }, 500);
+        // =============================================
+        // PART 2: Auto-Start on Page Load
+        // =============================================
+
+        window.addEventListener('load', async function() {
+            // Wait for page to settle
+            await new Promise(function(resolve) { setTimeout(resolve, 1000); });
+
+            var greeting = 'Selamat datang ke Khulafa Bistro! Saya Aisha. Boleh order sekarang.';
+            addMsg(greeting, 'ai');
+            chatHistory.push({ role: 'assistant', content: greeting });
+
+            try {
+                // Request microphone permission
+                var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Permission granted - stop the stream tracks (we just needed permission)
+                stream.getTracks().forEach(function(track) { track.stop(); });
+
+                autoListenEnabled = true;
+
+                // Play greeting, then auto-start listening after it finishes
+                speak(greeting, true);
+
+            } catch (err) {
+                console.log('Mic permission denied or unavailable:', err);
+                // Play greeting without auto-listen
+                speak(greeting, false);
+                addSystemMsg('Tap the mic button to start voice ordering.');
+            }
         });
     </script>
 </body>
