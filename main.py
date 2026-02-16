@@ -11,16 +11,22 @@ import requests
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
+from voice_ai import VoiceAI
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
 
 # Telegram Bot Configuration
-BOT_TOKEN = "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78"
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78")
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
+CASHIER_CHAT_ID = os.environ.get("CASHIER_CHAT_ID", "-1003483753298")
+OWNER_CHAT_ID = os.environ.get("OWNER_CHAT_ID", "")
 
 app = FastAPI(title="Khulafa Bistro API")
+
+# Voice AI instance
+voice_ai = VoiceAI()
 
 # Auto-run database migration on startup
 @app.on_event("startup")
@@ -33,6 +39,14 @@ async def startup_event():
         print("Migration completed!")
     except Exception as e:
         print(f"Migration error (may already be done): {e}")
+
+    try:
+        print("Running voice tables migration...")
+        import migrate_add_tables
+        migrate_add_tables.migrate()
+        print("Voice tables migration completed!")
+    except Exception as e:
+        print(f"Voice tables migration error (may already be done): {e}")
 
     # Start Telegram bot in background thread for button handling
     try:
@@ -632,6 +646,138 @@ def run_telegram_bot():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(start_bot())
+
+# ========== Voice QR Ordering Routes ==========
+
+class VoiceChatRequest(BaseModel):
+    message: str
+    history: list = []
+    table_number: str
+
+class VoiceOrderItem(BaseModel):
+    name: str
+    quantity: int
+    price: float
+
+class VoiceSubmitOrder(BaseModel):
+    table_number: str
+    items: List[VoiceOrderItem]
+    total: float
+
+@app.get("/table/{table_number}")
+async def serve_voice_page(table_number: str):
+    """Verify table exists and serve voice ordering page."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM restaurant_tables WHERE table_number = ?', (table_number,))
+    table = cursor.fetchone()
+    conn.close()
+
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    return FileResponse("static/voice.html")
+
+@app.post("/api/voice/chat")
+async def voice_chat(req: VoiceChatRequest):
+    """Process voice chat message through AI."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verify table exists
+    cursor.execute('SELECT * FROM restaurant_tables WHERE table_number = ?', (req.table_number,))
+    table = cursor.fetchone()
+    if not table:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    # Load menu items
+    cursor.execute('SELECT name, category, price FROM menu_items WHERE available = 1 ORDER BY category, name')
+    menu_items = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    result = voice_ai.chat(req.message, req.history, req.table_number, menu_items)
+
+    return {
+        "response": result["response"],
+        "order_confirmed": result["order_confirmed"],
+        "extracted_items": result["extracted_items"],
+    }
+
+@app.post("/api/voice/submit-order")
+async def voice_submit_order(req: VoiceSubmitOrder):
+    """Submit a voice order to the database and notify via Telegram."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verify table
+    cursor.execute('SELECT * FROM restaurant_tables WHERE table_number = ?', (req.table_number,))
+    table = cursor.fetchone()
+    if not table:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    order_number = f"KB{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    # Calculate total from items
+    total_price = sum(item.price * item.quantity for item in req.items)
+
+    # Insert order
+    cursor.execute('''
+        INSERT INTO orders (order_number, customer_telegram_id, customer_name, customer_phone,
+                           order_type, total_price, status, table_number, order_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (order_number, 'voice_qr', f'Table {req.table_number}', '',
+          'dine_in', total_price, 'pending', req.table_number, 'voice_qr'))
+
+    order_id = cursor.lastrowid
+
+    # Insert order items - match to menu items by name
+    for item in req.items:
+        cursor.execute('SELECT id, price FROM menu_items WHERE name = ? AND available = 1', (item.name,))
+        menu_item = cursor.fetchone()
+        menu_item_id = menu_item['id'] if menu_item else 0
+        item_price = menu_item['price'] if menu_item else item.price
+
+        cursor.execute('''
+            INSERT INTO order_items (order_id, menu_item_id, quantity, price)
+            VALUES (?, ?, ?, ?)
+        ''', (order_id, menu_item_id, item.quantity, item_price))
+
+    conn.commit()
+    conn.close()
+
+    # Send Telegram notification
+    send_voice_order_telegram(order_id, req.table_number, req.items, total_price)
+
+    return {"success": True, "order_id": order_id, "order_number": order_number}
+
+
+def send_voice_order_telegram(order_id, table_number, items, total):
+    """Send voice order notification to Telegram."""
+    now = datetime.now().strftime('%H:%M %d/%m/%Y')
+
+    items_text = ""
+    for item in items:
+        line_total = item.price * item.quantity
+        items_text += f"  • {item.name} x{item.quantity} - RM{line_total:.2f}\n"
+
+    message = (
+        f"🔔 TABLE {table_number} - NEW ORDER\n"
+        f"⏰ {now}\n\n"
+        f"Items:\n{items_text}\n"
+        f"💰 TOTAL: RM{total:.2f}\n\n"
+        f"Please key into POS."
+    )
+
+    # Send to cashier
+    if CASHIER_CHAT_ID:
+        send_message(CASHIER_CHAT_ID, message)
+
+    # Send to owner if different
+    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+        send_message(OWNER_CHAT_ID, message)
+
 
 # Setup all enhanced features
 setup_enhanced_routes(app)

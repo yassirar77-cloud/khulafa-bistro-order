@@ -2,8 +2,18 @@ services:
   - type: web
     name: khulafa-bistro-api
     env: python
+    region: singapore
+    plan: free
     buildCommand: pip install -r requirements.txt && python init_db.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.0
+        value: 3.12.0
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: CASHIER_CHAT_ID
+        sync: false
+      - key: OWNER_CHAT_ID
+        sync: false
