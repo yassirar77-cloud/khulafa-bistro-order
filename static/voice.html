@@ -3,816 +3,456 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Khulafa Bistro - Voice Order</title>
+    <title>Aisha - Voice Order</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
             color: #fff;
-            overflow-x: hidden;
-        }
-
-        .container {
-            max-width: 480px;
-            margin: 0 auto;
-            padding: 20px 16px;
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
-
+        
+        /* Header */
         .header {
-            text-align: center;
-            padding: 16px 0;
-        }
-
-        .header h1 {
-            font-size: 22px;
-            font-weight: 700;
-        }
-
-        .header .table-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            border-radius: 20px;
-            padding: 4px 16px;
-            font-size: 14px;
-            margin-top: 6px;
-        }
-
-        .voice-status {
+            padding: 12px 16px;
+            background: #111;
+            border-bottom: 1px solid #222;
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 6px;
-            margin-top: 8px;
-            font-size: 12px;
-            opacity: 0.7;
+            justify-content: space-between;
         }
-
-        .voice-status .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #2ecc71;
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
         }
-
-        .voice-status .dot.speaking {
-            background: #f39c12;
-            animation: blink 0.6s infinite alternate;
+        .header .table-badge {
+            background: #f59e0b;
+            color: #000;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 700;
         }
-
-        @keyframes blink {
-            from { opacity: 1; }
-            to { opacity: 0.3; }
-        }
-
+        
+        /* Chat Area */
         .chat-area {
             flex: 1;
             overflow-y: auto;
-            padding: 12px 0;
+            padding: 16px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
         }
-
-        .msg {
+        
+        .message {
             max-width: 85%;
-            padding: 12px 16px;
-            border-radius: 18px;
+            padding: 10px 14px;
+            border-radius: 16px;
             font-size: 15px;
             line-height: 1.4;
             animation: fadeIn 0.3s ease;
         }
-
+        
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        .msg.ai {
-            background: rgba(255,255,255,0.95);
-            color: #333;
+        
+        .message.ai {
+            background: #1a1a2e;
+            border: 1px solid #2a2a4e;
             align-self: flex-start;
             border-bottom-left-radius: 4px;
         }
-
-        .msg.user {
-            background: rgba(255,255,255,0.2);
+        
+        .message.ai .speaker-icon {
+            display: inline-block;
+            margin-left: 6px;
+            cursor: pointer;
+            opacity: 0.6;
+            font-size: 14px;
+        }
+        .message.ai .speaker-icon:hover { opacity: 1; }
+        .message.ai .speaker-icon.playing { opacity: 1; color: #f59e0b; }
+        
+        .message.user {
+            background: #1e3a2f;
+            border: 1px solid #2e5a3f;
             align-self: flex-end;
             border-bottom-right-radius: 4px;
         }
-
-        .msg.system {
-            background: rgba(255,255,255,0.1);
+        
+        .message.system {
+            background: #1a1a1a;
+            border: 1px solid #333;
             align-self: center;
-            text-align: center;
             font-size: 13px;
-            border-radius: 12px;
-        }
-
-        .order-summary {
-            background: rgba(255,255,255,0.95);
-            color: #333;
-            border-radius: 16px;
-            padding: 16px;
-            margin: 8px 0;
-        }
-
-        .order-summary h3 {
-            font-size: 16px;
-            margin-bottom: 10px;
-            color: #764ba2;
-        }
-
-        .order-summary .item {
-            display: flex;
-            justify-content: space-between;
-            padding: 4px 0;
-            font-size: 14px;
-        }
-
-        .order-summary .total {
-            border-top: 2px solid #764ba2;
-            margin-top: 8px;
-            padding-top: 8px;
-            font-weight: 700;
-            font-size: 16px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .mic-section {
+            color: #888;
             text-align: center;
-            padding: 16px 0 24px;
         }
-
+        
+        /* Mic Button Area */
+        .mic-area {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            background: #111;
+            border-top: 1px solid #222;
+        }
+        
         .mic-btn {
-            width: 150px;
-            height: 150px;
+            width: 72px;
+            height: 72px;
             border-radius: 50%;
-            border: none;
-            background: rgba(255,255,255,0.95);
-            color: #764ba2;
-            font-size: 56px;
+            border: 3px solid #333;
+            background: #1a1a1a;
+            color: #fff;
+            font-size: 28px;
             cursor: pointer;
-            transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            transition: all 0.2s;
         }
-
+        
         .mic-btn:active { transform: scale(0.95); }
         .mic-btn.listening {
-            background: #e74c3c;
-            color: #fff;
+            border-color: #ef4444;
+            background: #2a1a1a;
             animation: pulse 1.5s infinite;
         }
-
-        .mic-btn.speaking {
-            background: #f39c12;
-            color: #fff;
-            animation: speakPulse 1s infinite;
+        .mic-btn.processing {
+            border-color: #f59e0b;
+            background: #2a2a1a;
         }
-
+        .mic-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(231,76,60,0.4); }
-            70% { box-shadow: 0 0 0 20px rgba(231,76,60,0); }
-            100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
         }
-
-        @keyframes speakPulse {
-            0% { box-shadow: 0 0 0 0 rgba(243,156,18,0.4); }
-            70% { box-shadow: 0 0 0 15px rgba(243,156,18,0); }
-            100% { box-shadow: 0 0 0 0 rgba(243,156,18,0); }
+        
+        .mic-status {
+            font-size: 13px;
+            color: #666;
+            height: 18px;
         }
-
-        .mic-label {
-            margin-top: 10px;
-            font-size: 14px;
-            opacity: 0.8;
-        }
-
-        .confirm-btn {
+        .mic-status.active { color: #ef4444; }
+        
+        /* Audio playing indicator */
+        .audio-indicator {
             display: none;
-            width: 100%;
-            padding: 16px;
-            border: none;
-            border-radius: 14px;
-            background: #27ae60;
-            color: #fff;
-            font-size: 17px;
-            font-weight: 700;
-            cursor: pointer;
-            margin-top: 8px;
-            transition: background 0.2s;
-        }
-
-        .confirm-btn:active { background: #219a52; }
-        .confirm-btn.show { display: block; }
-
-        .success-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7);
-            z-index: 100;
             align-items: center;
-            justify-content: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #f59e0b;
         }
-
-        .success-overlay.show { display: flex; }
-
-        .success-card {
-            background: #fff;
-            color: #333;
-            border-radius: 24px;
-            padding: 40px 32px;
-            text-align: center;
-            max-width: 320px;
-            margin: 20px;
-        }
-
-        .success-card .icon { font-size: 64px; }
-        .success-card h2 { margin: 16px 0 8px; color: #27ae60; font-size: 22px; }
-        .success-card p { font-size: 15px; color: #666; line-height: 1.5; }
-
-        .loading { display: inline-block; }
-        .loading::after {
-            content: '';
-            animation: dots 1.5s steps(4,end) infinite;
-        }
-        @keyframes dots {
-            0% { content: ''; }
-            25% { content: '.'; }
-            50% { content: '..'; }
-            75% { content: '...'; }
-        }
-
-        .text-input-row {
+        .audio-indicator.visible { display: flex; }
+        .audio-bars {
             display: flex;
-            gap: 8px;
-            margin-top: 8px;
+            gap: 2px;
+            height: 16px;
+            align-items: end;
         }
-
-        .text-input-row input {
-            flex: 1;
-            padding: 12px 16px;
-            border-radius: 24px;
-            border: none;
-            font-size: 15px;
-            outline: none;
-            color: #333;
+        .audio-bars span {
+            width: 3px;
+            background: #f59e0b;
+            border-radius: 1px;
+            animation: barBounce 0.8s ease infinite;
         }
-
-        .text-input-row button {
-            padding: 12px 20px;
-            border-radius: 24px;
-            border: none;
-            background: rgba(255,255,255,0.95);
-            color: #764ba2;
-            font-weight: 700;
-            font-size: 15px;
-            cursor: pointer;
+        .audio-bars span:nth-child(1) { height: 6px; animation-delay: 0s; }
+        .audio-bars span:nth-child(2) { height: 12px; animation-delay: 0.15s; }
+        .audio-bars span:nth-child(3) { height: 8px; animation-delay: 0.3s; }
+        .audio-bars span:nth-child(4) { height: 14px; animation-delay: 0.45s; }
+        
+        @keyframes barBounce {
+            0%, 100% { transform: scaleY(0.5); }
+            50% { transform: scaleY(1.2); }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Khulafa Bistro</h1>
-            <div class="table-badge" id="tableBadge">Table --</div>
-            <div class="voice-status" id="voiceStatus">
-                <div class="dot" id="statusDot"></div>
-                <span id="statusText">Ready</span>
-            </div>
-        </div>
-
-        <div class="chat-area" id="chatArea"></div>
-
-        <div id="orderSummaryContainer"></div>
-
-        <button class="confirm-btn" id="confirmBtn" onclick="submitOrder()">Confirm Order</button>
-
-        <div class="mic-section">
-            <button class="mic-btn" id="micBtn" onclick="toggleMic()">
-                <span id="micIcon">&#x1F3A4;</span>
-            </button>
-            <div class="mic-label" id="micLabel">Tap to speak</div>
-        </div>
-
-        <div class="text-input-row">
-            <input type="text" id="textInput" placeholder="Type here..." onkeydown="if(event.key==='Enter')sendText()">
-            <button onclick="sendText()">Send</button>
-        </div>
+    <div class="header">
+        <h1>🎤 Aisha</h1>
+        <span class="table-badge" id="tableBadge">Table --</span>
     </div>
-
-    <div class="success-overlay" id="successOverlay">
-        <div class="success-card">
-            <div class="icon">&#x2705;</div>
-            <h2>Order Sent!</h2>
-            <p>Terima kasih! Order anda dah dihantar ke cashier. Sila tunggu ya.</p>
+    
+    <div class="chat-area" id="chatArea">
+        <!-- Messages appear here -->
+    </div>
+    
+    <div class="mic-area">
+        <div class="audio-indicator" id="audioIndicator">
+            <div class="audio-bars"><span></span><span></span><span></span><span></span></div>
+            <span>Aisha bercakap...</span>
         </div>
+        <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎤</button>
+        <div class="mic-status" id="micStatus">Tekan untuk bercakap</div>
     </div>
 
     <script>
-        const tableNumber = window.location.pathname.split('/').pop();
-        document.getElementById('tableBadge').textContent = 'Table ' + tableNumber;
-
-        let chatHistory = [];
-        let currentItems = [];
+        // === CONFIG ===
+        const tableNumber = window.location.pathname.split('/').pop() || 'T01';
+        document.getElementById('tableBadge').textContent = `Table ${tableNumber}`;
+        
+        let conversationHistory = [];
         let isListening = false;
-        let isSpeaking = false;
+        let isProcessing = false;
         let recognition = null;
-        let orderSubmitted = false;
         let currentAudio = null;
-        let autoListenEnabled = false;
-
-        // =============================================
-        // PART 1: Google Translate TTS (FREE)
-        // =============================================
-
-        function detectLanguage(text) {
-            // Check for common Malay words/patterns
-            var malayWords = [
-                'saya', 'nak', 'mau', 'boleh', 'terima', 'kasih', 'selamat',
-                'datang', 'order', 'tambah', 'lagi', 'cukup', 'dah', 'sudah',
-                'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh',
-                'lapan', 'sembilan', 'sepuluh', 'meja', 'makan', 'minum',
-                'apa', 'ini', 'itu', 'ada', 'tak', 'tidak', 'ya', 'baik',
-                'hari', 'pagi', 'petang', 'malam', 'anda', 'awak', 'kita',
-                'dengan', 'dan', 'atau', 'untuk', 'ke', 'di', 'yang',
-                'nasi', 'roti', 'ayam', 'ikan', 'teh', 'kopi', 'air',
-                'goreng', 'rebus', 'panggang', 'sambal', 'kuah',
-                'ringgit', 'harga', 'jumlah', 'semua', 'sahaja',
-                'tunggu', 'sila', 'tolong', 'hantar', 'confirm'
-            ];
-            var lowerText = text.toLowerCase();
-            var malayCount = 0;
-            for (var i = 0; i < malayWords.length; i++) {
-                if (lowerText.indexOf(malayWords[i]) !== -1) {
-                    malayCount++;
-                }
-            }
-            // If 2+ Malay words found, treat as Malay
-            return malayCount >= 2 ? 'ms' : 'en';
-        }
-
-        function splitIntoChunks(text, maxLen) {
-            // Split long text into sentence chunks for Google TTS (max ~200 chars per request)
-            if (text.length <= maxLen) return [text];
-
-            var chunks = [];
-            // Split by sentence-ending punctuation
-            var sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
-            var current = '';
-
-            for (var i = 0; i < sentences.length; i++) {
-                var sentence = sentences[i].trim();
-                if (!sentence) continue;
-
-                if ((current + ' ' + sentence).trim().length <= maxLen) {
-                    current = (current + ' ' + sentence).trim();
-                } else {
-                    if (current) chunks.push(current);
-                    // If single sentence is too long, split by commas
-                    if (sentence.length > maxLen) {
-                        var parts = sentence.split(/,\s*/);
-                        var part = '';
-                        for (var j = 0; j < parts.length; j++) {
-                            if ((part + ', ' + parts[j]).trim().length <= maxLen) {
-                                part = (part ? part + ', ' : '') + parts[j];
-                            } else {
-                                if (part) chunks.push(part);
-                                part = parts[j];
-                            }
-                        }
-                        current = part;
-                    } else {
-                        current = sentence;
+        
+        // === AUDIO PLAYBACK ===
+        
+        async function playAudioMatches(matches) {
+            """Play a sequence of audio matches one after another."""
+            const indicator = document.getElementById('audioIndicator');
+            indicator.classList.add('visible');
+            
+            for (const match of matches) {
+                if (match.audio_exists !== false) {
+                    try {
+                        await playAudioFile(match.audio_path);
+                    } catch(e) {
+                        console.log('Audio playback failed, skipping:', e);
                     }
                 }
             }
-            if (current) chunks.push(current);
-            return chunks;
+            
+            indicator.classList.remove('visible');
         }
-
-        function speak(text, autoListenAfter) {
-            // Stop any currently playing audio
-            stopSpeaking();
-
-            if (!text || text.trim().length === 0) {
-                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
-                    setTimeout(function() { startListening(); }, 300);
+        
+        function playAudioFile(path) {
+            return new Promise((resolve, reject) => {
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio = null;
                 }
-                return Promise.resolve();
-            }
-
-            var lang = detectLanguage(text);
-            var tl = (lang === 'ms') ? 'ms' : 'en';
-            var chunks = splitIntoChunks(text, 200);
-
-            setSpeakingState(true);
-
-            return playChunks(chunks, tl, 0).then(function() {
-                setSpeakingState(false);
-                // After speech finishes, auto-start listening if enabled
-                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
-                    setTimeout(function() { startListening(); }, 500);
-                }
-            }).catch(function(err) {
-                console.warn('TTS error, falling back to speechSynthesis:', err);
-                setSpeakingState(false);
-                // Fallback to browser speechSynthesis
-                fallbackSpeak(text, lang, autoListenAfter);
+                
+                const audio = new Audio(path);
+                currentAudio = audio;
+                
+                audio.onended = () => {
+                    currentAudio = null;
+                    resolve();
+                };
+                audio.onerror = () => {
+                    currentAudio = null;
+                    reject(new Error('Audio failed'));
+                };
+                
+                audio.play().catch(reject);
             });
         }
-
-        function playChunks(chunks, lang, index) {
-            if (index >= chunks.length) return Promise.resolve();
-
-            return new Promise(function(resolve, reject) {
-                var chunk = chunks[index];
-                var url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=' +
-                    lang + '&client=tw-ob&q=' + encodeURIComponent(chunk);
-
-                currentAudio = new Audio(url);
-                currentAudio.playbackRate = 1.1;
-
-                currentAudio.onended = function() {
-                    currentAudio = null;
-                    // Small gap between chunks
-                    setTimeout(function() {
-                        playChunks(chunks, lang, index + 1).then(resolve).catch(reject);
-                    }, 100);
-                };
-
-                currentAudio.onerror = function(e) {
-                    currentAudio = null;
-                    reject(e);
-                };
-
-                currentAudio.play().catch(function(e) {
-                    currentAudio = null;
-                    reject(e);
-                });
-            });
-        }
-
-        function stopSpeaking() {
+        
+        function stopAudio() {
             if (currentAudio) {
                 currentAudio.pause();
-                currentAudio.currentTime = 0;
                 currentAudio = null;
             }
-            // Also cancel any fallback speechSynthesis
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-            }
-            setSpeakingState(false);
+            document.getElementById('audioIndicator').classList.remove('visible');
         }
-
-        function fallbackSpeak(text, lang, autoListenAfter) {
-            // Browser speechSynthesis as fallback
-            if (!('speechSynthesis' in window)) {
-                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
-                    setTimeout(function() { startListening(); }, 500);
-                }
+        
+        // Fallback: use browser TTS if no audio match
+        function speakWithBrowserTTS(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ms-MY';
+                utterance.rate = 0.9;
+                speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // === SPEECH RECOGNITION ===
+        
+        function initRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                addMessage('system', 'Browser tidak support Speech Recognition. Sila guna Chrome.');
                 return;
             }
-            window.speechSynthesis.cancel();
-            var utter = new SpeechSynthesisUtterance(text);
-            utter.lang = (lang === 'ms') ? 'ms-MY' : 'en-MY';
-            utter.rate = 1.0;
-
-            setSpeakingState(true);
-
-            utter.onend = function() {
-                setSpeakingState(false);
-                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
-                    setTimeout(function() { startListening(); }, 500);
-                }
-            };
-            utter.onerror = function() {
-                setSpeakingState(false);
-                if (autoListenAfter && autoListenEnabled && !orderSubmitted) {
-                    setTimeout(function() { startListening(); }, 500);
-                }
-            };
-            window.speechSynthesis.speak(utter);
-        }
-
-        function setSpeakingState(speaking) {
-            isSpeaking = speaking;
-            var micBtn = document.getElementById('micBtn');
-            var statusDot = document.getElementById('statusDot');
-            var statusText = document.getElementById('statusText');
-
-            if (speaking) {
-                micBtn.classList.add('speaking');
-                micBtn.classList.remove('listening');
-                document.getElementById('micIcon').innerHTML = '&#x1F50A;';
-                document.getElementById('micLabel').textContent = 'Aisha speaking...';
-                statusDot.classList.add('speaking');
-                statusText.textContent = 'Speaking';
-            } else {
-                micBtn.classList.remove('speaking');
-                if (!isListening) {
-                    document.getElementById('micIcon').innerHTML = '&#x1F3A4;';
-                    document.getElementById('micLabel').textContent = 'Tap to speak';
-                    statusDot.classList.remove('speaking');
-                    statusText.textContent = 'Ready';
-                }
-            }
-        }
-
-        // =============================================
-        // PART 4: Better Voice Recognition
-        // =============================================
-
-        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
+            
             recognition = new SpeechRecognition();
             recognition.lang = 'ms-MY';
             recognition.continuous = false;
             recognition.interimResults = false;
-            recognition.maxAlternatives = 3;
-
-            recognition.onresult = function(e) {
-                // Pick the best transcript from alternatives
-                var text = e.results[0][0].transcript;
-                var confidence = e.results[0][0].confidence;
-
-                // Log alternatives for debugging
-                for (var i = 0; i < e.results[0].length; i++) {
-                    console.log('Alt ' + i + ':', e.results[0][i].transcript,
-                        '(' + (e.results[0][i].confidence * 100).toFixed(1) + '%)');
-                }
-
-                stopListening();
-                sendMessage(text);
+            recognition.maxAlternatives = 1;
+            
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                handleUserMessage(text);
             };
-
-            recognition.onerror = function(e) {
-                console.error('Speech error:', e.error);
-                stopListening();
-                if (e.error === 'no-speech') {
-                    addSystemMsg('Tak dengar suara. Cuba lagi.');
-                    // Auto-retry listening after no-speech
-                    if (autoListenEnabled && !orderSubmitted) {
-                        setTimeout(function() { startListening(); }, 1000);
-                    }
-                } else if (e.error === 'not-allowed') {
-                    addSystemMsg('Mic access denied. Please allow microphone permission.');
-                    autoListenEnabled = false;
+            
+            recognition.onerror = (event) => {
+                console.log('Speech error:', event.error);
+                if (event.error === 'no-speech') {
+                    setMicStatus('Tak dengar. Cuba lagi.', false);
+                } else if (event.error === 'not-allowed') {
+                    setMicStatus('Sila benarkan akses mikrofon.', false);
                 }
-            };
-
-            recognition.onend = function() {
                 stopListening();
+            };
+            
+            recognition.onend = () => {
+                if (isListening) stopListening();
             };
         }
-
+        
         function toggleMic() {
-            if (orderSubmitted) return;
-
-            // If speaking, stop the speech first
-            if (isSpeaking) {
-                stopSpeaking();
-                return;
-            }
-
+            if (isProcessing) return;
+            
+            stopAudio(); // Stop any playing audio
+            
             if (isListening) {
-                recognition.stop();
                 stopListening();
-                autoListenEnabled = false; // Manual stop disables auto-listen
             } else {
-                autoListenEnabled = true; // Manual start enables auto-listen
                 startListening();
             }
         }
-
+        
         function startListening() {
-            if (!recognition) {
-                addSystemMsg('Speech recognition not supported. Please type your order.');
-                return;
-            }
-            if (isListening || isSpeaking || orderSubmitted) return;
-
+            if (!recognition) initRecognition();
+            if (!recognition) return;
+            
             isListening = true;
-            var micBtn = document.getElementById('micBtn');
-            micBtn.classList.add('listening');
-            micBtn.classList.remove('speaking');
-            document.getElementById('micIcon').innerHTML = '&#x1F3A4;';
-            document.getElementById('micLabel').textContent = 'Listening...';
-            document.getElementById('statusDot').classList.remove('speaking');
-            document.getElementById('statusText').textContent = 'Listening';
-
+            const btn = document.getElementById('micBtn');
+            btn.classList.add('listening');
+            btn.textContent = '⏹';
+            setMicStatus('Saya dengar...', true);
+            
             try {
                 recognition.start();
-            } catch (e) {
+            } catch(e) {
+                console.log('Recognition start error:', e);
                 stopListening();
             }
         }
-
+        
         function stopListening() {
             isListening = false;
-            var micBtn = document.getElementById('micBtn');
-            micBtn.classList.remove('listening');
-            if (!isSpeaking) {
-                document.getElementById('micIcon').innerHTML = '&#x1F3A4;';
-                document.getElementById('micLabel').textContent = 'Tap to speak';
-                document.getElementById('statusText').textContent = 'Ready';
-            }
+            const btn = document.getElementById('micBtn');
+            btn.classList.remove('listening');
+            btn.textContent = '🎤';
+            setMicStatus('Tekan untuk bercakap', false);
+            
+            try { recognition.stop(); } catch(e) {}
         }
-
-        // =============================================
-        // Chat & Message Functions
-        // =============================================
-
-        function addMsg(text, role) {
-            var chatArea = document.getElementById('chatArea');
-            var div = document.createElement('div');
-            div.className = 'msg ' + role;
-            div.textContent = text;
+        
+        function setMicStatus(text, active) {
+            const el = document.getElementById('micStatus');
+            el.textContent = text;
+            el.className = 'mic-status' + (active ? ' active' : '');
+        }
+        
+        // === CHAT ===
+        
+        function addMessage(type, text, audioMatches = null) {
+            const chatArea = document.getElementById('chatArea');
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            
+            if (type === 'ai' && audioMatches && audioMatches.length > 0) {
+                const speakerBtn = document.createElement('span');
+                speakerBtn.className = 'speaker-icon';
+                speakerBtn.textContent = '🔊';
+                speakerBtn.onclick = () => {
+                    speakerBtn.classList.add('playing');
+                    playAudioMatches(audioMatches).then(() => {
+                        speakerBtn.classList.remove('playing');
+                    });
+                };
+                div.textContent = text + ' ';
+                div.appendChild(speakerBtn);
+            } else {
+                div.textContent = text;
+            }
+            
             chatArea.appendChild(div);
             chatArea.scrollTop = chatArea.scrollHeight;
         }
-
-        function addSystemMsg(text) {
-            addMsg(text, 'system');
-        }
-
-        function showLoading() {
-            var chatArea = document.getElementById('chatArea');
-            var div = document.createElement('div');
-            div.className = 'msg ai';
-            div.id = 'loadingMsg';
-            div.innerHTML = '<span class="loading">Aisha is typing</span>';
-            chatArea.appendChild(div);
-            chatArea.scrollTop = chatArea.scrollHeight;
-        }
-
-        function removeLoading() {
-            var el = document.getElementById('loadingMsg');
-            if (el) el.remove();
-        }
-
-        function renderOrderSummary(items) {
-            if (!items || items.length === 0) {
-                document.getElementById('orderSummaryContainer').innerHTML = '';
-                document.getElementById('confirmBtn').classList.remove('show');
-                return;
-            }
-
-            var total = 0;
-            var html = '<div class="order-summary"><h3>Order Summary</h3>';
-            items.forEach(function(item) {
-                var lineTotal = item.price * item.quantity;
-                total += lineTotal;
-                html += '<div class="item"><span>' + item.name + ' x' + item.quantity + '</span><span>RM' + lineTotal.toFixed(2) + '</span></div>';
-            });
-            html += '<div class="total"><span>TOTAL</span><span>RM' + total.toFixed(2) + '</span></div></div>';
-
-            document.getElementById('orderSummaryContainer').innerHTML = html;
-        }
-
-        // =============================================
-        // PART 3: Continuous Flow - Send & Auto-Listen
-        // =============================================
-
-        async function sendMessage(text) {
-            if (orderSubmitted) return;
-            addMsg(text, 'user');
-
-            chatHistory.push({ role: 'user', content: text });
-            showLoading();
-
+        
+        async function handleUserMessage(text) {
+            // Show user message
+            addMessage('user', text);
+            conversationHistory.push({ role: 'user', content: text });
+            
+            // Set processing state
+            isProcessing = true;
+            const btn = document.getElementById('micBtn');
+            btn.classList.add('processing');
+            btn.disabled = true;
+            setMicStatus('Aisha sedang fikir...', false);
+            
             try {
-                var res = await fetch('/api/voice/chat', {
+                // Send to API
+                const response = await fetch('/api/voice/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         message: text,
-                        history: chatHistory.slice(0, -1),
+                        history: conversationHistory,
                         table_number: tableNumber
                     })
                 });
-
-                var data = await res.json();
-                removeLoading();
-
-                addMsg(data.response, 'ai');
-                chatHistory.push({ role: 'assistant', content: data.response });
-
-                if (data.extracted_items && data.extracted_items.length > 0) {
-                    currentItems = data.extracted_items;
-                    renderOrderSummary(currentItems);
-                }
-
-                if (data.order_confirmed && currentItems.length > 0) {
-                    document.getElementById('confirmBtn').classList.add('show');
-                }
-
-                // Speak the response, then auto-listen after it finishes
-                var shouldAutoListen = !data.order_confirmed;
-                speak(data.response, shouldAutoListen);
-
-            } catch (err) {
-                removeLoading();
-                addMsg('Connection error. Please try again.', 'system');
-                console.error(err);
-                // Auto-retry listening on error
-                if (autoListenEnabled && !orderSubmitted) {
-                    setTimeout(function() { startListening(); }, 1500);
-                }
-            }
-        }
-
-        function sendText() {
-            var input = document.getElementById('textInput');
-            var text = input.value.trim();
-            if (!text) return;
-            input.value = '';
-            sendMessage(text);
-        }
-
-        async function submitOrder() {
-            if (orderSubmitted || currentItems.length === 0) return;
-
-            var total = currentItems.reduce(function(sum, item) {
-                return sum + item.price * item.quantity;
-            }, 0);
-
-            document.getElementById('confirmBtn').textContent = 'Sending...';
-            document.getElementById('confirmBtn').disabled = true;
-
-            try {
-                var res = await fetch('/api/voice/submit-order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        table_number: tableNumber,
-                        items: currentItems,
-                        total: total
-                    })
-                });
-
-                var data = await res.json();
-
-                if (data.success) {
-                    orderSubmitted = true;
-                    autoListenEnabled = false;
-                    document.getElementById('successOverlay').classList.add('show');
-                    speak('Terima kasih! Order dah dihantar ke cashier. Sila tunggu ya.', false);
+                
+                const data = await response.json();
+                
+                // Add AI message
+                addMessage('ai', data.text, data.audio_matches);
+                conversationHistory.push({ role: 'assistant', content: data.text });
+                
+                // Play audio
+                if (data.has_audio && data.audio_matches.length > 0) {
+                    await playAudioMatches(data.audio_matches);
                 } else {
-                    document.getElementById('confirmBtn').textContent = 'Confirm Order';
-                    document.getElementById('confirmBtn').disabled = false;
-                    addSystemMsg('Error submitting order. Please try again.');
+                    // Fallback to browser TTS
+                    speakWithBrowserTTS(data.text);
                 }
-            } catch (err) {
-                document.getElementById('confirmBtn').textContent = 'Confirm Order';
-                document.getElementById('confirmBtn').disabled = false;
-                addSystemMsg('Connection error. Please try again.');
-                console.error(err);
+                
+            } catch(err) {
+                console.error('Chat error:', err);
+                addMessage('system', 'Maaf, ada masalah. Cuba lagi.');
+            }
+            
+            // Reset
+            isProcessing = false;
+            btn.classList.remove('processing');
+            btn.disabled = false;
+            setMicStatus('Tekan untuk bercakap', false);
+        }
+        
+        // === INIT ===
+        
+        async function init() {
+            initRecognition();
+            
+            // Get greeting from server
+            try {
+                const res = await fetch('/api/voice/greeting');
+                const data = await res.json();
+                
+                addMessage('ai', data.text, data.audio_matches);
+                
+                if (data.has_audio) {
+                    // Small delay then play greeting
+                    setTimeout(() => playAudioMatches(data.audio_matches), 500);
+                }
+            } catch(e) {
+                addMessage('ai', 'Hai! Saya Aisha. Nak order apa?');
             }
         }
-
-        // =============================================
-        // PART 2: Auto-Start on Page Load
-        // =============================================
-
-        window.addEventListener('load', async function() {
-            // Wait for page to settle
-            await new Promise(function(resolve) { setTimeout(resolve, 1000); });
-
-            var greeting = 'Selamat datang ke Khulafa Bistro! Saya Aisha. Boleh order sekarang.';
-            addMsg(greeting, 'ai');
-            chatHistory.push({ role: 'assistant', content: greeting });
-
-            try {
-                // Request microphone permission
-                var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                // Permission granted - stop the stream tracks (we just needed permission)
-                stream.getTracks().forEach(function(track) { track.stop(); });
-
-                autoListenEnabled = true;
-
-                // Play greeting, then auto-start listening after it finishes
-                speak(greeting, true);
-
-            } catch (err) {
-                console.log('Mic permission denied or unavailable:', err);
-                // Play greeting without auto-listen
-                speak(greeting, false);
-                addSystemMsg('Tap the mic button to start voice ordering.');
-            }
-        });
+        
+        // Start when page loads
+        window.addEventListener('load', init);
     </script>
 </body>
 </html>

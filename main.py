@@ -11,7 +11,8 @@ import requests
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
-from voice_ai import VoiceAI
+from voice_ai import chat_with_voice, get_greeting_with_audio
+from aisha_voice import get_aisha, create_voice_routes
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
@@ -25,8 +26,16 @@ OWNER_CHAT_ID = os.environ.get("OWNER_CHAT_ID", "")
 
 app = FastAPI(title="Khulafa Bistro API")
 
-# Voice AI instance
-voice_ai = VoiceAI()
+# Mount audio files for Aisha voice system
+if os.path.exists("static/audio"):
+    app.mount("/audio", StaticFiles(directory="static/audio"), name="audio")
+
+# Initialize Aisha voice system
+aisha = get_aisha(
+    audio_dir="static/audio/wavs",
+    metadata_path="static/audio/metadata.csv"
+)
+create_voice_routes(app, aisha)
 
 # Auto-run database migration on startup
 @app.on_event("startup")
@@ -690,7 +699,7 @@ async def serve_voice_page(table_number: str):
 
 @app.post("/api/voice/chat")
 async def voice_chat(req: VoiceChatRequest):
-    """Process voice chat message through AI."""
+    """Process voice chat message through AI with pre-recorded audio matching."""
     conn = get_db()
     cursor = conn.cursor()
 
@@ -701,18 +710,29 @@ async def voice_chat(req: VoiceChatRequest):
         conn.close()
         raise HTTPException(status_code=404, detail="Table not found")
 
-    # Load menu items
+    # Load menu items and build context string
     cursor.execute('SELECT name, category, price FROM menu_items WHERE available = 1 ORDER BY category, name')
-    menu_items = [dict(row) for row in cursor.fetchall()]
+    menu_items = cursor.fetchall()
+    menu_context = "\n".join([
+        f"- {item['name']} (RM{item['price']:.2f})"
+        for item in menu_items
+    ])
     conn.close()
 
-    result = voice_ai.chat(req.message, req.history, req.table_number, menu_items)
+    # Call the new voice AI with audio matching
+    result = await chat_with_voice(
+        message=req.message,
+        history=req.history,
+        table_number=req.table_number,
+        menu_context=menu_context
+    )
 
-    return {
-        "response": result["response"],
-        "order_confirmed": result["order_confirmed"],
-        "extracted_items": result["extracted_items"],
-    }
+    return result
+
+@app.get("/api/voice/greeting")
+async def voice_greeting():
+    """Get time-appropriate greeting with pre-recorded audio."""
+    return get_greeting_with_audio()
 
 @app.post("/api/voice/submit-order")
 async def voice_submit_order(req: VoiceSubmitOrder):
