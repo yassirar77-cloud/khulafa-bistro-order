@@ -3,456 +3,481 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aisha - Voice Order</title>
+    <title>Aisha - Pelayan AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #0a0a0a;
-            color: #fff;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{
+            font-family:'Plus Jakarta Sans',sans-serif;
+            background:#0D0D0D;color:#ECECEC;
+            height:100dvh;overflow:hidden;
         }
-        
-        /* Header */
-        .header {
-            padding: 12px 16px;
-            background: #111;
-            border-bottom: 1px solid #222;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+        .wrap{max-width:500px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;position:relative}
+
+        /* ===== SPLASH ===== */
+        #splash{
+            position:fixed;inset:0;background:#0D0D0D;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            z-index:100;transition:opacity .5s,visibility .5s;
         }
-        .header h1 {
-            font-size: 18px;
-            font-weight: 600;
+        #splash.hide{opacity:0;visibility:hidden;pointer-events:none}
+        #splash .logo{
+            width:96px;height:96px;border-radius:50%;
+            background:linear-gradient(135deg,#10A37F,#0D8A6A);
+            display:flex;align-items:center;justify-content:center;
+            font-size:42px;font-weight:700;color:#fff;margin-bottom:20px;
+            box-shadow:0 0 40px rgba(16,163,127,.3);
         }
-        .header .table-badge {
-            background: #f59e0b;
-            color: #000;
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 13px;
-            font-weight: 700;
+        #splash h1{font-size:36px;font-weight:700;color:#fff;margin-bottom:6px}
+        #splash .sub{font-size:16px;color:#777;margin-bottom:48px}
+        .start-btn{
+            background:#10A37F;color:#fff;border:none;
+            padding:16px 52px;border-radius:28px;
+            font-size:17px;font-weight:600;font-family:inherit;
+            cursor:pointer;transition:transform .15s,background .2s;
         }
-        
-        /* Chat Area */
-        .chat-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        .start-btn:active{transform:scale(.96);background:#0D8A6A}
+
+        /* ===== HEADER ===== */
+        .hdr{
+            padding:14px 20px;background:#0D0D0D;border-bottom:1px solid #1E1E1E;
+            display:flex;align-items:center;gap:12px;flex-shrink:0;
         }
-        
-        .message {
-            max-width: 85%;
-            padding: 10px 14px;
-            border-radius: 16px;
-            font-size: 15px;
-            line-height: 1.4;
-            animation: fadeIn 0.3s ease;
+        .hdr .av{
+            width:36px;height:36px;border-radius:50%;
+            background:linear-gradient(135deg,#10A37F,#0D8A6A);
+            display:flex;align-items:center;justify-content:center;
+            font-size:15px;font-weight:700;color:#fff;flex-shrink:0;
         }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
+        .hdr h1{font-size:16px;font-weight:600}
+        .hdr .st{font-size:12px;color:#555}
+
+        /* ===== CHAT ===== */
+        #chat{
+            flex:1;overflow-y:auto;padding:16px 16px 8px;
+            display:flex;flex-direction:column;gap:14px;
         }
-        
-        .message.ai {
-            background: #1a1a2e;
-            border: 1px solid #2a2a4e;
-            align-self: flex-start;
-            border-bottom-left-radius: 4px;
+        .m{display:flex;gap:10px;max-width:88%;animation:mIn .3s ease}
+        @keyframes mIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .m.ai{align-self:flex-start}
+        .m.user{align-self:flex-end;flex-direction:row-reverse}
+        .m .bbl{padding:11px 15px;border-radius:18px;font-size:15px;line-height:1.5}
+        .m.ai .bbl{background:#1A1A1A;border-bottom-left-radius:4px}
+        .m.user .bbl{background:#10A37F;color:#fff;border-bottom-right-radius:4px}
+        .m .ic{
+            width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:2px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:12px;font-weight:700;color:#fff;
         }
-        
-        .message.ai .speaker-icon {
-            display: inline-block;
-            margin-left: 6px;
-            cursor: pointer;
-            opacity: 0.6;
-            font-size: 14px;
+        .m.ai .ic{background:linear-gradient(135deg,#10A37F,#0D8A6A)}
+        .m.user .ic{background:#2A2A2A}
+
+        /* Typing dots */
+        .dots{display:flex;gap:5px;padding:12px 16px}
+        .dots span{
+            width:8px;height:8px;border-radius:50%;background:#444;
+            animation:dot 1.4s ease infinite;
         }
-        .message.ai .speaker-icon:hover { opacity: 1; }
-        .message.ai .speaker-icon.playing { opacity: 1; color: #f59e0b; }
-        
-        .message.user {
-            background: #1e3a2f;
-            border: 1px solid #2e5a3f;
-            align-self: flex-end;
-            border-bottom-right-radius: 4px;
+        .dots span:nth-child(2){animation-delay:.2s}
+        .dots span:nth-child(3){animation-delay:.4s}
+        @keyframes dot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
+
+        /* ===== LISTEN BAR ===== */
+        .lbar{
+            padding:14px 20px;background:#111;border-top:1px solid #1E1E1E;
+            display:flex;align-items:center;justify-content:center;gap:10px;
+            min-height:52px;flex-shrink:0;
         }
-        
-        .message.system {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            align-self: center;
-            font-size: 13px;
-            color: #888;
-            text-align: center;
+        .ldot{width:10px;height:10px;border-radius:50%;background:#444;flex-shrink:0}
+        .ldot.on{background:#ef4444;animation:lpulse 1.5s ease infinite}
+        @keyframes lpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+        .lbar .ltxt{font-size:13px;color:#555}
+        .lbar .ltxt.on{color:#ef4444}
+
+        /* Audio playing bar */
+        .abar{display:flex;align-items:center;gap:8px;color:#10A37F;font-size:13px}
+        .abars{display:flex;gap:2px;height:18px;align-items:flex-end}
+        .abars span{width:3px;background:#10A37F;border-radius:2px;animation:ba .8s ease infinite}
+        .abars span:nth-child(1){height:6px}
+        .abars span:nth-child(2){height:14px;animation-delay:.15s}
+        .abars span:nth-child(3){height:10px;animation-delay:.3s}
+        .abars span:nth-child(4){height:16px;animation-delay:.45s}
+        @keyframes ba{0%,100%{transform:scaleY(.5)}50%{transform:scaleY(1.2)}}
+
+        /* ===== ORDER PANEL ===== */
+        #overlay{
+            position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;
+            opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s;
         }
-        
-        /* Mic Button Area */
-        .mic-area {
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            background: #111;
-            border-top: 1px solid #222;
+        #overlay.on{opacity:1;visibility:visible}
+        #panel{
+            position:fixed;bottom:0;left:50%;
+            transform:translateX(-50%) translateY(100%);
+            width:100%;max-width:500px;
+            background:#1A1A1A;border-radius:20px 20px 0 0;
+            padding:16px 20px 24px;
+            transition:transform .4s cubic-bezier(.4,0,.2,1);
+            z-index:50;max-height:70dvh;overflow-y:auto;
         }
-        
-        .mic-btn {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            border: 3px solid #333;
-            background: #1a1a1a;
-            color: #fff;
-            font-size: 28px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
+        #panel.on{transform:translateX(-50%) translateY(0)}
+        .phandle{width:40px;height:4px;background:#333;border-radius:2px;margin:0 auto 16px}
+        #panel h2{font-size:17px;font-weight:700;margin-bottom:14px}
+        .olist{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+        .oitem{
+            display:flex;justify-content:space-between;align-items:center;
+            padding:10px 12px;background:#252525;border-radius:10px;font-size:14px;
         }
-        
-        .mic-btn:active { transform: scale(0.95); }
-        .mic-btn.listening {
-            border-color: #ef4444;
-            background: #2a1a1a;
-            animation: pulse 1.5s infinite;
+        .oitem .nm{flex:1}
+        .oitem .pr{color:#10A37F;font-weight:600;margin-left:12px}
+        .ototal{
+            display:flex;justify-content:space-between;
+            padding:14px 0;border-top:1px solid #333;
+            font-size:16px;font-weight:700;margin-bottom:16px;
         }
-        .mic-btn.processing {
-            border-color: #f59e0b;
-            background: #2a2a1a;
+        .ototal .amt{color:#10A37F}
+        .obtns{display:flex;gap:12px}
+        .obtns button{
+            flex:1;padding:14px;border:none;border-radius:14px;
+            font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;
         }
-        .mic-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
-        }
-        
-        .mic-status {
-            font-size: 13px;
-            color: #666;
-            height: 18px;
-        }
-        .mic-status.active { color: #ef4444; }
-        
-        /* Audio playing indicator */
-        .audio-indicator {
-            display: none;
-            align-items: center;
-            gap: 6px;
-            font-size: 13px;
-            color: #f59e0b;
-        }
-        .audio-indicator.visible { display: flex; }
-        .audio-bars {
-            display: flex;
-            gap: 2px;
-            height: 16px;
-            align-items: end;
-        }
-        .audio-bars span {
-            width: 3px;
-            background: #f59e0b;
-            border-radius: 1px;
-            animation: barBounce 0.8s ease infinite;
-        }
-        .audio-bars span:nth-child(1) { height: 6px; animation-delay: 0s; }
-        .audio-bars span:nth-child(2) { height: 12px; animation-delay: 0.15s; }
-        .audio-bars span:nth-child(3) { height: 8px; animation-delay: 0.3s; }
-        .audio-bars span:nth-child(4) { height: 14px; animation-delay: 0.45s; }
-        
-        @keyframes barBounce {
-            0%, 100% { transform: scaleY(0.5); }
-            50% { transform: scaleY(1.2); }
-        }
+        .bmore{background:#252525;color:#ECECEC}
+        .bmore:active{background:#333}
+        .bsend{background:#10A37F;color:#fff}
+        .bsend:active{background:#0D8A6A}
+        .empty-msg{text-align:center;color:#555;font-size:14px;padding:20px 0}
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🎤 Aisha</h1>
-        <span class="table-badge" id="tableBadge">Table --</span>
-    </div>
-    
-    <div class="chat-area" id="chatArea">
-        <!-- Messages appear here -->
-    </div>
-    
-    <div class="mic-area">
-        <div class="audio-indicator" id="audioIndicator">
-            <div class="audio-bars"><span></span><span></span><span></span><span></span></div>
-            <span>Aisha bercakap...</span>
-        </div>
-        <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎤</button>
-        <div class="mic-status" id="micStatus">Tekan untuk bercakap</div>
-    </div>
 
-    <script>
-        // === CONFIG ===
-        const tableNumber = window.location.pathname.split('/').pop() || 'T01';
-        document.getElementById('tableBadge').textContent = `Table ${tableNumber}`;
-        
-        let conversationHistory = [];
-        let isListening = false;
-        let isProcessing = false;
-        let recognition = null;
-        let currentAudio = null;
-        
-        // === AUDIO PLAYBACK ===
-        
-        async function playAudioMatches(matches) {
-            // Play a sequence of audio matches one after another.
-            const indicator = document.getElementById('audioIndicator');
-            indicator.classList.add('visible');
-            
-            for (const match of matches) {
-                if (match.audio_exists !== false) {
-                    try {
-                        await playAudioFile(match.audio_path);
-                    } catch(e) {
-                        console.log('Audio playback failed, skipping:', e);
-                    }
-                }
-            }
-            
-            indicator.classList.remove('visible');
+<!-- Splash -->
+<div id="splash">
+    <div class="logo">A</div>
+    <h1>Aisha</h1>
+    <p class="sub">Pelayan AI Khulafa Bistro</p>
+    <button class="start-btn" onclick="startOrder()">Mula Order</button>
+</div>
+
+<!-- App -->
+<div class="wrap">
+    <div class="hdr">
+        <div class="av">A</div>
+        <div>
+            <h1>Aisha</h1>
+            <div class="st" id="hdrSt">Pelayan AI</div>
+        </div>
+    </div>
+    <div id="chat"></div>
+    <div class="lbar" id="lbar">
+        <div class="ldot" id="ldot"></div>
+        <span class="ltxt" id="ltxt">Menunggu...</span>
+    </div>
+</div>
+
+<!-- Overlay + Order Panel -->
+<div id="overlay" onclick="hidePanel()"></div>
+<div id="panel">
+    <div class="phandle"></div>
+    <h2>Pesanan Anda</h2>
+    <div class="olist" id="olist"></div>
+    <div class="ototal">
+        <span>Jumlah</span>
+        <span class="amt" id="ototal">RM 0.00</span>
+    </div>
+    <div class="obtns">
+        <button class="bmore" onclick="addMore()">Tambah Lagi</button>
+        <button class="bsend" onclick="submitOrder()">Hantar Order</button>
+    </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const table = new URLSearchParams(location.search).get('table')
+    || location.pathname.split('/').pop() || 'T01';
+
+// ===== STATE =====
+let history = [];
+let recognition = null;
+let shouldListen = false;
+let currentAudio = null;
+let isPlaying = false;
+let orderItems = [];       // [{name, price}]
+let orderTimer = null;
+let lastAddTime = 0;
+let processTimer = null;
+let pendingText = '';
+
+const DONE = ['tu je','cukup','dah','itu sahaja','itu saja','habis','takde dah','sekian','sudah','settle'];
+const GREET = ['hai','hello','hi','assalamualaikum','salam','hey','apa khabar'];
+
+// ===== SPLASH =====
+async function startOrder() {
+    document.getElementById('splash').classList.add('hide');
+    initSR();
+    // Start mic from user gesture (triggers permission)
+    shouldListen = true;
+    try { recognition.start(); } catch(e) {}
+    setListen('Mendengar...', true);
+    // Load greeting
+    try {
+        const r = await fetch('/api/voice/greeting');
+        const d = await r.json();
+        addMsg('ai', d.text);
+        if (d.has_audio && d.audio_matches && d.audio_matches.length) {
+            await playSeq(d.audio_matches);
         }
-        
-        function playAudioFile(path) {
-            return new Promise((resolve, reject) => {
-                if (currentAudio) {
-                    currentAudio.pause();
-                    currentAudio = null;
-                }
-                
-                const audio = new Audio(path);
-                currentAudio = audio;
-                
-                audio.onended = () => {
-                    currentAudio = null;
-                    resolve();
-                };
-                audio.onerror = () => {
-                    currentAudio = null;
-                    reject(new Error('Audio failed'));
-                };
-                
-                audio.play().catch(reject);
-            });
-        }
-        
-        function stopAudio() {
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio = null;
-            }
-            document.getElementById('audioIndicator').classList.remove('visible');
-        }
-        
-        // Fallback: use browser TTS if no audio match
-        function speakWithBrowserTTS(text) {
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'ms-MY';
-                utterance.rate = 0.9;
-                speechSynthesis.speak(utterance);
-            }
-        }
-        
-        // === SPEECH RECOGNITION ===
-        
-        function initRecognition() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                addMessage('system', 'Browser tidak support Speech Recognition. Sila guna Chrome.');
-                return;
-            }
-            
-            recognition = new SpeechRecognition();
-            recognition.lang = 'ms-MY';
-            recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
-            
-            recognition.onresult = (event) => {
-                const text = event.results[0][0].transcript;
-                handleUserMessage(text);
-            };
-            
-            recognition.onerror = (event) => {
-                console.log('Speech error:', event.error);
-                if (event.error === 'no-speech') {
-                    setMicStatus('Tak dengar. Cuba lagi.', false);
-                } else if (event.error === 'not-allowed') {
-                    setMicStatus('Sila benarkan akses mikrofon.', false);
-                }
-                stopListening();
-            };
-            
-            recognition.onend = () => {
-                if (isListening) stopListening();
-            };
-        }
-        
-        function toggleMic() {
-            if (isProcessing) return;
-            
-            stopAudio(); // Stop any playing audio
-            
-            if (isListening) {
-                stopListening();
+    } catch(e) {
+        addMsg('ai', 'Hai! Saya Aisha. Nak order apa hari ini?');
+    }
+}
+
+// ===== SPEECH RECOGNITION =====
+function initSR() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+        addMsg('ai', 'Maaf, browser tidak support. Sila guna Chrome.');
+        return;
+    }
+    recognition = new SR();
+    recognition.lang = 'ms-MY';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (e) => {
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+                pendingText += e.results[i][0].transcript;
             } else {
-                startListening();
+                setListen(e.results[i][0].transcript, true);
             }
         }
-        
-        function startListening() {
-            if (!recognition) initRecognition();
-            if (!recognition) return;
-            
-            isListening = true;
-            const btn = document.getElementById('micBtn');
-            btn.classList.add('listening');
-            btn.textContent = '⏹';
-            setMicStatus('Saya dengar...', true);
-            
-            try {
-                recognition.start();
-            } catch(e) {
-                console.log('Recognition start error:', e);
-                stopListening();
-            }
+        if (pendingText) {
+            clearTimeout(processTimer);
+            processTimer = setTimeout(() => {
+                const t = pendingText.trim();
+                pendingText = '';
+                if (t) { pauseMic(); handleMsg(t); }
+            }, 800);
         }
-        
-        function stopListening() {
-            isListening = false;
-            const btn = document.getElementById('micBtn');
-            btn.classList.remove('listening');
-            btn.textContent = '🎤';
-            setMicStatus('Tekan untuk bercakap', false);
-            
-            try { recognition.stop(); } catch(e) {}
+    };
+
+    recognition.onerror = (e) => {
+        if (e.error === 'not-allowed') {
+            setListen('Sila benarkan mikrofon', false);
+        } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+            setTimeout(() => { if (shouldListen) resumeMic(); }, 1000);
         }
-        
-        function setMicStatus(text, active) {
-            const el = document.getElementById('micStatus');
-            el.textContent = text;
-            el.className = 'mic-status' + (active ? ' active' : '');
+    };
+
+    recognition.onend = () => {
+        if (shouldListen && !isPlaying) {
+            setTimeout(() => {
+                try { recognition.start(); } catch(e) {}
+            }, 200);
         }
-        
-        // === CHAT ===
-        
-        function addMessage(type, text, audioMatches = null) {
-            const chatArea = document.getElementById('chatArea');
-            const div = document.createElement('div');
-            div.className = `message ${type}`;
-            
-            if (type === 'ai' && audioMatches && audioMatches.length > 0) {
-                const speakerBtn = document.createElement('span');
-                speakerBtn.className = 'speaker-icon';
-                speakerBtn.textContent = '🔊';
-                speakerBtn.onclick = () => {
-                    speakerBtn.classList.add('playing');
-                    playAudioMatches(audioMatches).then(() => {
-                        speakerBtn.classList.remove('playing');
-                    });
-                };
-                div.textContent = text + ' ';
-                div.appendChild(speakerBtn);
-            } else {
-                div.textContent = text;
-            }
-            
-            chatArea.appendChild(div);
-            chatArea.scrollTop = chatArea.scrollHeight;
+    };
+}
+
+function pauseMic() {
+    shouldListen = false;
+    try { recognition.stop(); } catch(e) {}
+    setListen('Memproses...', false);
+}
+
+function resumeMic() {
+    if (!recognition) return;
+    shouldListen = true;
+    try { recognition.start(); } catch(e) {}
+    setListen('Mendengar...', true);
+}
+
+function setListen(txt, on) {
+    const d = document.getElementById('ldot');
+    const t = document.getElementById('ltxt');
+    if (!d || !t) return;
+    d.className = 'ldot' + (on ? ' on' : '');
+    t.textContent = txt;
+    t.className = 'ltxt' + (on ? ' on' : '');
+}
+
+// ===== AUDIO =====
+async function playSeq(matches) {
+    isPlaying = true;
+    pauseMic();
+    showAudioBar(true);
+    for (const m of matches) {
+        if (m.audio_exists !== false) {
+            try { await playOne(m.audio_path); } catch(e) {}
         }
-        
-        async function handleUserMessage(text) {
-            // Show user message
-            addMessage('user', text);
-            conversationHistory.push({ role: 'user', content: text });
-            
-            // Set processing state
-            isProcessing = true;
-            const btn = document.getElementById('micBtn');
-            btn.classList.add('processing');
-            btn.disabled = true;
-            setMicStatus('Aisha sedang fikir...', false);
-            
-            try {
-                // Send to API
-                const response = await fetch('/api/voice/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: text,
-                        history: conversationHistory,
-                        table_number: tableNumber
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // Add AI message
-                addMessage('ai', data.text, data.audio_matches);
-                conversationHistory.push({ role: 'assistant', content: data.text });
-                
-                // Play audio
-                if (data.has_audio && data.audio_matches.length > 0) {
-                    await playAudioMatches(data.audio_matches);
-                } else {
-                    // Fallback to browser TTS
-                    speakWithBrowserTTS(data.text);
-                }
-                
-            } catch(err) {
-                console.error('Chat error:', err);
-                addMessage('system', 'Maaf, ada masalah. Cuba lagi.');
-            }
-            
-            // Reset
-            isProcessing = false;
-            btn.classList.remove('processing');
-            btn.disabled = false;
-            setMicStatus('Tekan untuk bercakap', false);
+    }
+    showAudioBar(false);
+    isPlaying = false;
+    resumeMic();
+}
+
+function playOne(path) {
+    return new Promise((res, rej) => {
+        if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+        const a = new Audio(path);
+        currentAudio = a;
+        a.onended = () => { currentAudio = null; res(); };
+        a.onerror = () => { currentAudio = null; rej(); };
+        a.play().catch(rej);
+    });
+}
+
+function showAudioBar(on) {
+    const bar = document.getElementById('lbar');
+    if (on) {
+        bar.innerHTML = '<div class="abar"><div class="abars"><span></span><span></span><span></span><span></span></div><span>Aisha bercakap...</span></div>';
+    } else {
+        bar.innerHTML = '<div class="ldot on" id="ldot"></div><span class="ltxt on" id="ltxt">Mendengar...</span>';
+    }
+}
+
+// ===== CHAT UI =====
+function addMsg(type, text) {
+    const c = document.getElementById('chat');
+    const d = document.createElement('div');
+    d.className = 'm ' + type;
+    if (type === 'ai') {
+        d.innerHTML = '<div class="ic">A</div><div class="bbl">' + esc(text) + '</div>';
+    } else {
+        d.innerHTML = '<div class="bbl">' + esc(text) + '</div>';
+    }
+    c.appendChild(d);
+    c.scrollTop = c.scrollHeight;
+}
+
+function showDots() {
+    const c = document.getElementById('chat');
+    const d = document.createElement('div');
+    d.className = 'm ai'; d.id = 'dots';
+    d.innerHTML = '<div class="ic">A</div><div class="bbl"><div class="dots"><span></span><span></span><span></span></div></div>';
+    c.appendChild(d);
+    c.scrollTop = c.scrollHeight;
+}
+
+function hideDots() { const el = document.getElementById('dots'); if (el) el.remove(); }
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ===== HANDLE MESSAGE =====
+async function handleMsg(text) {
+    addMsg('user', text);
+    history.push({ role: 'user', content: text });
+
+    const low = text.toLowerCase();
+    const isDone = DONE.some(p => low.includes(p));
+    const isGreet = GREET.some(g => low.includes(g));
+
+    showDots();
+
+    try {
+        const r = await fetch('/api/voice/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, history: history, table_number: table })
+        });
+        const d = await r.json();
+        hideDots();
+        addMsg('ai', d.text);
+        history.push({ role: 'assistant', content: d.text });
+
+        // Extract order items
+        if (!isDone && !isGreet) {
+            extractItem(d.text, text);
         }
-        
-        // === INIT ===
-        
-        async function init() {
-            initRecognition();
-            
-            // Get greeting from server
-            try {
-                const res = await fetch('/api/voice/greeting');
-                const data = await res.json();
-                
-                addMessage('ai', data.text, data.audio_matches);
-                
-                if (data.has_audio) {
-                    // Small delay then play greeting
-                    setTimeout(() => playAudioMatches(data.audio_matches), 500);
-                }
-            } catch(e) {
-                addMessage('ai', 'Hai! Saya Aisha. Nak order apa?');
-            }
+
+        // Play audio
+        if (d.has_audio && d.audio_matches && d.audio_matches.length) {
+            await playSeq(d.audio_matches);
+        } else {
+            resumeMic();
         }
-        
-        // Start when page loads
-        window.addEventListener('load', init);
-    </script>
+
+        // Show panel if done phrase or 8s timeout
+        if (isDone && orderItems.length > 0) {
+            showPanel();
+        } else if (orderItems.length > 0) {
+            clearTimeout(orderTimer);
+            lastAddTime = Date.now();
+            orderTimer = setTimeout(() => {
+                if (Date.now() - lastAddTime >= 7500) showPanel();
+            }, 8000);
+        }
+
+    } catch(e) {
+        hideDots();
+        addMsg('ai', 'Maaf, ada masalah. Cuba lagi.');
+        resumeMic();
+    }
+}
+
+// ===== ORDER TRACKING =====
+function extractItem(aiText, userText) {
+    const ai = aiText.toLowerCase();
+    const confirm = ['baik','okay','ok','siap','nota','catat','tambah','satu','dua','tiga','empat','lima'];
+    if (!confirm.some(w => ai.includes(w))) return;
+
+    // Extract price from AI text
+    const pm = aiText.match(/RM\s*([\d]+(?:\.[\d]{1,2})?)/i);
+    const price = pm ? parseFloat(pm[1]) : null;
+
+    // Use user text as item name, capitalize first letter
+    const name = userText.charAt(0).toUpperCase() + userText.slice(1);
+
+    // Avoid duplicate consecutive items
+    if (orderItems.length && orderItems[orderItems.length - 1].name.toLowerCase() === name.toLowerCase()) return;
+
+    orderItems.push({ name, price });
+    lastAddTime = Date.now();
+}
+
+function renderPanel() {
+    const list = document.getElementById('olist');
+    list.innerHTML = '';
+    let total = 0;
+
+    if (orderItems.length === 0) {
+        list.innerHTML = '<div class="empty-msg">Belum ada pesanan</div>';
+    } else {
+        orderItems.forEach(item => {
+            const d = document.createElement('div');
+            d.className = 'oitem';
+            const p = item.price ? 'RM ' + item.price.toFixed(2) : '-';
+            if (item.price) total += item.price;
+            d.innerHTML = '<span class="nm">' + esc(item.name) + '</span><span class="pr">' + p + '</span>';
+            list.appendChild(d);
+        });
+    }
+    document.getElementById('ototal').textContent = 'RM ' + total.toFixed(2);
+}
+
+function showPanel() {
+    clearTimeout(orderTimer);
+    renderPanel();
+    document.getElementById('panel').classList.add('on');
+    document.getElementById('overlay').classList.add('on');
+}
+
+function hidePanel() {
+    document.getElementById('panel').classList.remove('on');
+    document.getElementById('overlay').classList.remove('on');
+}
+
+function addMore() {
+    hidePanel();
+    if (!shouldListen) resumeMic();
+}
+
+function submitOrder() {
+    hidePanel();
+    addMsg('ai', 'Terima kasih! Pesanan anda sedang diproses. Sila tunggu ya.');
+    orderItems = [];
+    clearTimeout(orderTimer);
+}
+</script>
 </body>
 </html>
