@@ -15,29 +15,20 @@
         }
         .wrap{max-width:500px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;position:relative}
 
-        /* ===== SPLASH ===== */
-        #splash{
-            position:fixed;inset:0;background:#0D0D0D;
-            display:flex;flex-direction:column;align-items:center;justify-content:center;
-            z-index:100;transition:opacity .5s,visibility .5s;
-        }
-        #splash.hide{opacity:0;visibility:hidden;pointer-events:none}
-        #splash .logo{
-            width:96px;height:96px;border-radius:50%;
-            background:linear-gradient(135deg,#10A37F,#0D8A6A);
+        /* ===== TAP BANNER ===== */
+        #tapBanner{
+            position:fixed;inset:0;background:rgba(13,13,13,.92);
             display:flex;align-items:center;justify-content:center;
-            font-size:42px;font-weight:700;color:#fff;margin-bottom:20px;
-            box-shadow:0 0 40px rgba(16,163,127,.3);
+            z-index:100;cursor:pointer;
+            -webkit-tap-highlight-color:transparent;
         }
-        #splash h1{font-size:36px;font-weight:700;color:#fff;margin-bottom:6px}
-        #splash .sub{font-size:16px;color:#777;margin-bottom:48px}
-        .start-btn{
-            background:#10A37F;color:#fff;border:none;
-            padding:16px 52px;border-radius:28px;
-            font-size:17px;font-weight:600;font-family:inherit;
-            cursor:pointer;transition:transform .15s,background .2s;
+        #tapBanner.hide{display:none}
+        #tapBanner .tap-text{
+            font-size:18px;font-weight:600;color:#777;
+            padding:14px 32px;border:1px solid #333;border-radius:28px;
+            animation:tapPulse 2s ease infinite;
         }
-        .start-btn:active{transform:scale(.96);background:#0D8A6A}
+        @keyframes tapPulse{0%,100%{opacity:.7}50%{opacity:1}}
 
         /* ===== HEADER ===== */
         .hdr{
@@ -150,12 +141,9 @@
 </head>
 <body>
 
-<!-- Splash -->
-<div id="splash">
-    <div class="logo">A</div>
-    <h1>Aisha</h1>
-    <p class="sub">Pelayan AI Khulafa Bistro</p>
-    <button class="start-btn" onclick="startOrder()">Mula Order</button>
+<!-- Tap-anywhere banner (replaces splash) -->
+<div id="tapBanner" onclick="startOrder()">
+    <div class="tap-text">Ketuk untuk mula / Tap to start</div>
 </div>
 
 <!-- App -->
@@ -204,17 +192,19 @@ let isPlaying = false;
 let orderItems = [];       // [{name, price}]
 let orderTimer = null;
 let lastAddTime = 0;
-let processTimer = null;
-let pendingText = '';
+let lastResultText = '';
+let debounceTimer = null;
+let started = false;
 
 const DONE = ['tu je','cukup','dah','itu sahaja','itu saja','habis','takde dah','sekian','sudah','settle'];
 const GREET = ['hai','hello','hi','assalamualaikum','salam','hey','apa khabar'];
 
-// ===== SPLASH =====
+// ===== START (on first tap anywhere) =====
 async function startOrder() {
-    document.getElementById('splash').classList.add('hide');
+    if (started) return;
+    started = true;
+    document.getElementById('tapBanner').classList.add('hide');
     initSR();
-    // Start mic from user gesture (triggers permission)
     shouldListen = true;
     try { recognition.start(); } catch(e) {}
     setListen('Mendengar...', true);
@@ -240,25 +230,25 @@ function initSR() {
     }
     recognition = new SR();
     recognition.lang = 'ms-MY';
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (e) => {
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) {
-                pendingText += e.results[i][0].transcript;
-            } else {
-                setListen(e.results[i][0].transcript, true);
-            }
-        }
-        if (pendingText) {
-            clearTimeout(processTimer);
-            processTimer = setTimeout(() => {
-                const t = pendingText.trim();
-                pendingText = '';
+        const result = e.results[0];
+        if (result && result.isFinal) {
+            const text = result[0].transcript.trim();
+            if (!text) return;
+
+            // Debounce: wait 1.5s of silence before sending
+            lastResultText = text;
+            setListen('"' + text + '"', true);
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const t = lastResultText;
+                lastResultText = '';
                 if (t) { pauseMic(); handleMsg(t); }
-            }, 800);
+            }, 1500);
         }
     };
 
@@ -266,21 +256,30 @@ function initSR() {
         if (e.error === 'not-allowed') {
             setListen('Sila benarkan mikrofon', false);
         } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
-            setTimeout(() => { if (shouldListen) resumeMic(); }, 1000);
+            // Restart on transient errors
+            setTimeout(() => { if (shouldListen && !isPlaying) restartRecognition(); }, 500);
         }
     };
 
     recognition.onend = () => {
-        if (shouldListen && !isPlaying) {
-            setTimeout(() => {
-                try { recognition.start(); } catch(e) {}
-            }, 200);
+        // Auto-restart recognition when it ends (continuous=false causes it to end after each utterance)
+        // But only if we haven't captured a result that's pending debounce
+        if (shouldListen && !isPlaying && !lastResultText) {
+            restartRecognition();
         }
     };
 }
 
+function restartRecognition() {
+    if (!recognition || !shouldListen) return;
+    try { recognition.start(); } catch(e) {}
+    setListen('Mendengar...', true);
+}
+
 function pauseMic() {
     shouldListen = false;
+    clearTimeout(debounceTimer);
+    lastResultText = '';
     try { recognition.stop(); } catch(e) {}
     setListen('Memproses...', false);
 }
@@ -288,8 +287,8 @@ function pauseMic() {
 function resumeMic() {
     if (!recognition) return;
     shouldListen = true;
-    try { recognition.start(); } catch(e) {}
-    setListen('Mendengar...', true);
+    lastResultText = '';
+    restartRecognition();
 }
 
 function setListen(txt, on) {
