@@ -11,7 +11,7 @@ import requests
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
-from voice_ai import chat_with_voice, get_greeting_with_audio
+from voice_ai import chat_with_voice
 from aisha_voice import get_aisha, create_voice_routes
 from threading import Thread
 from telegram import Update
@@ -728,11 +728,6 @@ async def voice_chat(req: VoiceChatRequest):
     )
 
     return result
-
-@app.get("/api/voice/greeting")
-async def voice_greeting():
-    """Get time-appropriate greeting with pre-recorded audio."""
-    return get_greeting_with_audio()
 
 @app.post("/api/voice/submit-order")
 async def voice_submit_order(req: VoiceSubmitOrder):

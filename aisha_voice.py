@@ -258,14 +258,21 @@ def create_voice_routes(app, aisha: AishaVoice):
     
     @app.get("/api/voice/greeting")
     async def get_greeting(time_of_day: str = "default"):
-        """Get greeting audio."""
+        """Get greeting audio in the format the frontend expects."""
         match = aisha.get_greeting(time_of_day)
         if match:
-            return match
-        return JSONResponse(
-            {"error": "No greeting audio found"},
-            status_code=404
-        )
+            return {
+                "text": match["text"],
+                "audio_matches": [match],
+                "has_audio": True,
+                "time_of_day": time_of_day
+            }
+        return {
+            "text": "Hai, saya Aisha. Boleh saya ambil pesanan anda?",
+            "audio_matches": [],
+            "has_audio": False,
+            "time_of_day": time_of_day
+        }
     
     @app.get("/api/voice/stats")
     async def voice_stats():
