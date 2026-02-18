@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,8 +11,7 @@ import requests
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
-from voice_ai import chat_with_voice
-from aisha_voice import get_aisha, create_voice_routes
+from order_engine import get_engine
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
@@ -30,12 +29,6 @@ app = FastAPI(title="Khulafa Bistro API")
 if os.path.exists("static/audio"):
     app.mount("/audio", StaticFiles(directory="static/audio"), name="audio")
 
-# Initialize Aisha voice system
-aisha = get_aisha(
-    audio_dir="static/audio/wavs",
-    metadata_path="static/audio/metadata.csv"
-)
-create_voice_routes(app, aisha)
 
 # Auto-run database migration on startup
 @app.on_event("startup")
@@ -668,11 +661,6 @@ def run_telegram_bot():
 
 # ========== Voice QR Ordering Routes ==========
 
-class VoiceChatRequest(BaseModel):
-    message: str
-    history: list = []
-    table_number: str
-
 class VoiceOrderItem(BaseModel):
     name: str
     quantity: int
@@ -698,36 +686,47 @@ async def serve_voice_page(table_number: str):
     return FileResponse("static/voice.html")
 
 @app.post("/api/voice/chat")
-async def voice_chat(req: VoiceChatRequest):
-    """Process voice chat message through AI with pre-recorded audio matching."""
-    conn = get_db()
-    cursor = conn.cursor()
+async def voice_chat(request: Request):
+    """Process voice chat with rule-based ordering engine (zero API cost)."""
+    engine = get_engine()
+    body = await request.json()
+    speech_text = body.get("message", "")
+    current_order = body.get("order", [])
 
-    # Verify table exists
-    cursor.execute('SELECT * FROM restaurant_tables WHERE table_number = ?', (req.table_number,))
-    table = cursor.fetchone()
-    if not table:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Table not found")
+    result = engine.process(speech_text, current_order)
 
-    # Load menu items and build context string
-    cursor.execute('SELECT name, category, price FROM menu_items WHERE available = 1 ORDER BY category, name')
-    menu_items = cursor.fetchall()
-    menu_context = "\n".join([
-        f"- {item['name']} (RM{item['price']:.2f})"
-        for item in menu_items
-    ])
-    conn.close()
+    # Convert audio_ids to audio paths
+    audio_matches = []
+    for aid in result.get("audio_ids", []):
+        audio_matches.append({
+            "audio_path": f"/audio/wavs/{aid}.wav",
+            "audio_exists": True,
+        })
 
-    # Call the new voice AI with audio matching
-    result = await chat_with_voice(
-        message=req.message,
-        history=req.history,
-        table_number=req.table_number,
-        menu_context=menu_context
-    )
+    return {
+        "text": result["text"],
+        "audio_matches": audio_matches,
+        "action": result["action"],
+        "new_items": result.get("new_items", []),
+        "order": result.get("order", []),
+        "total": result.get("total", 0),
+        "has_audio": len(audio_matches) > 0,
+    }
 
-    return result
+@app.get("/api/voice/greeting")
+async def voice_greeting():
+    """Return time-based greeting with pre-recorded audio."""
+    engine = get_engine()
+    result = engine.get_greeting()
+    audio_matches = [
+        {"audio_path": f"/audio/wavs/{aid}.wav", "audio_exists": True}
+        for aid in result["audio_ids"]
+    ]
+    return {
+        "text": result["text"],
+        "audio_matches": audio_matches,
+        "has_audio": True,
+    }
 
 @app.post("/api/voice/submit-order")
 async def voice_submit_order(req: VoiceSubmitOrder):
