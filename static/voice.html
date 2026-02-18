@@ -441,12 +441,9 @@ async function processMessage(text) {
             order = data.order || order;
             updateOrderPanel();
             showOrderPanel();
-        } else if (data.action === 'confirm_order') {
+        } else if (data.action === 'confirm_order' && order.length > 0) {
             order = data.order || order;
             updateOrderPanel();
-            showOrderPanel();
-        } else if (data.action === 'recommend') {
-            // Just play audio, no order changes
         }
 
         // Play audio response
@@ -454,6 +451,12 @@ async function processMessage(text) {
             await playAudioSequence(data.audio_matches);
         } else {
             resumeMic();
+        }
+
+        // Auto-submit to Telegram when confirmed
+        if (data.action === 'confirm_order' && order.length > 0) {
+            await sendOrderToTelegram();
+            return;
         }
 
     } catch(e) {
@@ -508,13 +511,10 @@ function addMore() {
     if (!shouldListen) resumeMic();
 }
 
-async function submitOrder() {
-    if (!order.length) return;
-
+async function sendOrderToTelegram() {
     hideOrderPanel();
     pauseMic();
 
-    // Format items for submit
     const items = order.map(i => ({
         name: i.name,
         quantity: i.qty || 1,
@@ -523,7 +523,7 @@ async function submitOrder() {
     const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
 
     try {
-        const res = await fetch('/api/voice/submit-order', {
+        await fetch('/api/voice/order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -532,28 +532,31 @@ async function submitOrder() {
                 total: total
             })
         });
-        const data = await res.json();
 
-        if (data.success) {
-            // Show success overlay
-            document.getElementById('successOverlay').classList.add('show');
+        // Show success overlay
+        document.getElementById('successOverlay').classList.add('show');
 
-            // Play thank you audio
-            try { await playSingleAudio('/audio/wavs/0021.wav'); } catch(e) {}
+        // Play thank you audio
+        try { await playSingleAudio('/audio/wavs/0021.wav'); } catch(e) {}
 
-            // Reset after 5 seconds
-            setTimeout(() => {
-                document.getElementById('successOverlay').classList.remove('show');
-                order = [];
-                updateOrderPanel();
-                addMessage('ai', 'Pesanan baru? Saya sedia membantu!');
-                resumeMic();
-            }, 5000);
-        }
+        // Reset after 5 seconds
+        setTimeout(() => {
+            document.getElementById('successOverlay').classList.remove('show');
+            order = [];
+            panelOpen = false;
+            updateOrderPanel();
+            addMessage('ai', 'Pesanan baru? Saya sedia membantu!');
+            resumeMic();
+        }, 5000);
     } catch(e) {
         addMessage('ai', 'Maaf, ada masalah hantar order. Cuba lagi.');
         resumeMic();
     }
+}
+
+async function submitOrder() {
+    if (!order.length) return;
+    await sendOrderToTelegram();
 }
 </script>
 </body>

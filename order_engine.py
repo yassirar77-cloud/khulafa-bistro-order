@@ -219,48 +219,64 @@ class OrderEngine:
         """
         Extract menu items with quantities using greedy longest-match.
         Returns list of (name, qty, audio_id, price).
+
+        Uses a character-level 'used' mask so every occurrence of
+        every menu item is found, longest-first, without overlap.
         """
+        text = re.sub(r'\s+', ' ', text.strip())
+        length = len(text)
+        used = [False] * length
         results = []
-        remaining = text
 
         for key in _SORTED_KEYS:
-            if key not in remaining:
-                continue
+            klen = len(key)
+            start = 0
+            while start <= length - klen:
+                idx = text.find(key, start)
+                if idx == -1:
+                    break
 
-            # Find position of the match
-            idx = remaining.index(key)
+                # Skip if any character in this span is already used
+                if any(used[idx:idx + klen]):
+                    start = idx + 1
+                    continue
 
-            # Look for quantity before the item name
-            qty = 1
-            before = remaining[:idx].strip()
+                # Mark characters as used
+                for i in range(idx, idx + klen):
+                    used[i] = True
 
-            # Check for digit right before
-            digit_match = re.search(r'(\d+)\s*$', before)
-            if digit_match:
-                qty = int(digit_match.group(1))
-            else:
-                # Check for Malay number word right before
-                for word, num in MALAY_NUMBERS.items():
-                    if before.endswith(word) or before.endswith(word + " "):
-                        qty = num
-                        break
+                # --- Detect quantity ---
+                qty = 1
+                found_qty_before = False
+                before = text[:idx].rstrip()
 
-            # Also check for quantity after: "roti canai dua"
-            after_start = idx + len(key)
-            after = remaining[after_start:].strip()
-            after_first = after.split()[0] if after.split() else ""
+                # Digit right before: "2 roti canai"
+                digit_match = re.search(r'(\d+)\s*$', before)
+                if digit_match:
+                    qty = int(digit_match.group(1))
+                    found_qty_before = True
+                else:
+                    # Malay number word: "dua roti canai"
+                    for word, num in MALAY_NUMBERS.items():
+                        if before.endswith(word):
+                            qty = num
+                            found_qty_before = True
+                            break
 
-            digit_after = re.match(r'^(\d+)', after_first)
-            if digit_after:
-                qty = int(digit_after.group(1))
-            elif after_first in MALAY_NUMBERS:
-                qty = MALAY_NUMBERS[after_first]
+                # Only check after if no quantity found before
+                if not found_qty_before:
+                    after = text[idx + klen:].lstrip()
+                    after_first = after.split()[0] if after.split() else ""
+                    digit_after = re.match(r'^(\d+)$', after_first)
+                    if digit_after:
+                        qty = int(digit_after.group(1))
+                    elif after_first in MALAY_NUMBERS:
+                        qty = MALAY_NUMBERS[after_first]
 
-            audio_id, price = MENU[key]
-            results.append((key, qty, audio_id, price))
+                audio_id, price = MENU[key]
+                results.append((key, qty, audio_id, price))
 
-            # Remove matched portion to avoid double-matching
-            remaining = remaining[:idx] + " " * len(key) + remaining[idx + len(key):]
+                start = idx + klen
 
         return results
 

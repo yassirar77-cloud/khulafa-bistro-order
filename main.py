@@ -728,6 +728,44 @@ async def voice_greeting():
         "has_audio": True,
     }
 
+@app.post("/api/voice/order")
+async def voice_order(request: Request):
+    """Send confirmed voice order to Telegram (lightweight, no DB validation)."""
+    body = await request.json()
+    table_number = body.get("table_number", "?")
+    items = body.get("items", [])
+    total = body.get("total", 0)
+
+    if not items:
+        return {"success": False, "error": "No items"}
+
+    now = datetime.now().strftime('%H:%M %d/%m/%Y')
+
+    items_text = ""
+    for item in items:
+        qty = item.get("quantity", item.get("qty", 1))
+        price = item.get("price", 0)
+        line_total = price * qty
+        items_text += f"  • {item['name']} x{qty} - RM{line_total:.2f}\n"
+
+    message = (
+        f"🎤 VOICE ORDER - TABLE {table_number}\n"
+        f"⏰ {now}\n\n"
+        f"{items_text}\n"
+        f"💰 TOTAL: RM{total:.2f}\n\n"
+        f"Please key into POS."
+    )
+
+    # Send to cashier
+    if CASHIER_CHAT_ID:
+        send_message(CASHIER_CHAT_ID, message)
+
+    # Send to owner if different
+    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+        send_message(OWNER_CHAT_ID, message)
+
+    return {"success": True}
+
 @app.post("/api/voice/submit-order")
 async def voice_submit_order(req: VoiceSubmitOrder):
     """Submit a voice order to the database and notify via Telegram."""
