@@ -27,7 +27,7 @@ END_PHRASES = [
     "settle", "setel",
 ]
 
-# Recommendation phrases
+# Recommendation phrases — only triggered when customer explicitly asks
 RECOMMEND_PHRASES = [
     "apa sedap", "apa yang sedap", "apa best",
     "recommend", "rekomen", "cadang", "cadangkan",
@@ -35,6 +35,20 @@ RECOMMEND_PHRASES = [
     "suggest", "apa bagus", "menu popular",
     "nak tahu apa sedap", "apa favourite",
 ]
+
+# Text-only add-on hints (shown in chat, NOT played as audio)
+ADDON_HINTS = {
+    "briyani ayam":       "Nak set? Briyani Ayam Bawang Set RM15",
+    "briyani kambing":    "Nak set? Briyani Kambing Set RM20",
+    "briyani daging":     "Nak set? Briyani Daging Set RM18",
+    "nasi ayam":          "Tambah bawang? Nasi Ayam Bawang RM9",
+    "nasi ayam sayur":    "Tambah bawang? Nasi Ayam Bawang Sayur RM10",
+    "roti canai":         "Tambah telur? Roti Telur RM3",
+    "naan biasa":         "Upgrade cheese? Naan Cheese RM5",
+    "naan butter":        "Upgrade garlic? Naan Butter Garlic RM4.50",
+    "nasi goreng biasa":  "Upgrade mamak? Nasi Goreng Mamak RM8",
+    "nasi goreng kampung": "Tambah telur? Ayam Goreng RM6",
+}
 
 # Full menu: name → (audio_id, price)
 MENU = {
@@ -155,7 +169,7 @@ class OrderEngine:
         if self._matches_phrase(text, END_PHRASES):
             return self._build_confirm(current_order)
 
-        # 2. Check for recommendation request
+        # 2. Check for recommendation request (ONLY when customer explicitly asks)
         if self._matches_phrase(text, RECOMMEND_PHRASES):
             return self._response(
                 text="Bestseller kami nasi ayam bawang, roti canai, dan maggi goreng.",
@@ -175,8 +189,25 @@ class OrderEngine:
                 order=current_order,
             )
 
-        # 4. Build response
-        return self._build_add_items(found_items, current_order)
+        # 4. Check for ambiguous matches (partial speech → multiple possible items)
+        ambiguous = self._find_ambiguous(found_items)
+        if ambiguous:
+            ambiguous_names = {a["matched"] for a in ambiguous}
+            clear_items = [
+                (n, q, a, p) for n, q, a, p in found_items
+                if n not in ambiguous_names
+            ]
+            return self._build_disambiguate(ambiguous, clear_items, current_order)
+
+        # 5. Build response — item names + "Ada lagi?" only
+        result = self._build_add_items(found_items, current_order)
+
+        # 6. Add text-only add-on hint (no audio, shown in chat only)
+        hint = self._get_addon_hint(found_items)
+        if hint:
+            result["text_suggestion"] = hint
+
+        return result
 
     def get_greeting(self) -> dict:
         """Return time-appropriate greeting with audio IDs."""
@@ -280,6 +311,103 @@ class OrderEngine:
 
         return results
 
+    def _find_ambiguous(self, found_items: list) -> list:
+        """
+        Check if any matched items have longer alternatives from
+        a different category (different first word).
+
+        E.g. "ayam bawang" is ambiguous because "nasi ayam bawang"
+        and "briyani ayam bawang set" also exist.
+        But "roti canai" is NOT ambiguous vs "roti canai susu" (same category).
+        """
+        ambiguous = []
+        for name, qty, audio_id, price in found_items:
+            first_word = name.split()[0]
+            alternatives = []
+            for menu_key in _SORTED_KEYS:
+                if menu_key == name:
+                    continue
+                if name not in menu_key:
+                    continue
+                # Only flag as ambiguous if the longer item starts
+                # with a different word (different category)
+                other_first = menu_key.split()[0]
+                if other_first != first_word:
+                    alt_audio, alt_price = MENU[menu_key]
+                    alternatives.append({
+                        "name": menu_key.title(),
+                        "price": alt_price,
+                    })
+            if alternatives:
+                # Include the exact match itself as an option
+                alternatives.append({
+                    "name": name.title(),
+                    "price": price,
+                })
+                # Sort by price descending
+                alternatives.sort(key=lambda x: -x["price"])
+                ambiguous.append({
+                    "matched": name,
+                    "qty": qty,
+                    "options": alternatives,
+                })
+        return ambiguous
+
+    @staticmethod
+    def _get_addon_hint(found_items: list) -> str | None:
+        """Return a text-only add-on suggestion (no audio) for the ordered items."""
+        for name, qty, audio_id, price in found_items:
+            if name in ADDON_HINTS:
+                return ADDON_HINTS[name]
+        return None
+
+    def _build_disambiguate(self, ambiguous: list, clear_items: list,
+                            current_order: list) -> dict:
+        """Build disambiguation response when speech is ambiguous."""
+        # Add any clear (non-ambiguous) items to the order first
+        updated_order = list(current_order)
+        clear_new = []
+        clear_audio = []
+        clear_names = []
+
+        for name, qty, audio_id, price in clear_items:
+            item = {"name": name.title(), "qty": qty, "price": price}
+            clear_new.append(item)
+            clear_audio.append(audio_id)
+            display = name.title()
+            if qty > 1:
+                display = f"{qty} {display}"
+            clear_names.append(display)
+
+            merged = False
+            for existing in updated_order:
+                if existing.get("name", "").lower() == item["name"].lower():
+                    existing["qty"] = existing.get("qty", 1) + item["qty"]
+                    merged = True
+                    break
+            if not merged:
+                updated_order.append(dict(item))
+
+        total = sum(i.get("price", 0) * i.get("qty", 1) for i in updated_order)
+
+        # Build text message
+        matched_names = [a["matched"].title() for a in ambiguous]
+        text_parts = []
+        if clear_names:
+            text_parts.append(", ".join(clear_names))
+        text_parts.append(f"{', '.join(matched_names)} — yang mana satu?")
+        text = ". ".join(text_parts)
+
+        return self._response(
+            text=text,
+            audio_ids=clear_audio,  # only play audio for clear items, not ambiguous
+            action="disambiguate",
+            new_items=clear_new,
+            order=updated_order,
+            total=total,
+            disambiguate=ambiguous,
+        )
+
     def _build_add_items(self, found_items: list, current_order: list) -> dict:
         """Build response for adding items to order."""
         new_items = []
@@ -354,8 +482,9 @@ class OrderEngine:
         )
 
     @staticmethod
-    def _response(text, audio_ids, action, order=None, new_items=None, total=0):
-        return {
+    def _response(text, audio_ids, action, order=None, new_items=None, total=0,
+                  text_suggestion=None, disambiguate=None):
+        result = {
             "text": text,
             "audio_ids": audio_ids,
             "action": action,
@@ -363,6 +492,11 @@ class OrderEngine:
             "order": order or [],
             "total": total,
         }
+        if text_suggestion:
+            result["text_suggestion"] = text_suggestion
+        if disambiguate:
+            result["disambiguate"] = disambiguate
+        return result
 
 
 # ------------------------------------------------------------------ #

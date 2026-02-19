@@ -8,6 +8,7 @@ import sqlite3
 import json
 from datetime import datetime
 import requests
+import httpx
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
@@ -703,7 +704,7 @@ async def voice_chat(request: Request):
             "audio_exists": True,
         })
 
-    return {
+    response = {
         "text": result["text"],
         "audio_matches": audio_matches,
         "action": result["action"],
@@ -712,6 +713,16 @@ async def voice_chat(request: Request):
         "total": result.get("total", 0),
         "has_audio": len(audio_matches) > 0,
     }
+
+    # Pass through text-only suggestion (no audio)
+    if result.get("text_suggestion"):
+        response["text_suggestion"] = result["text_suggestion"]
+
+    # Pass through disambiguation options
+    if result.get("disambiguate"):
+        response["disambiguate"] = result["disambiguate"]
+
+    return response
 
 @app.get("/api/voice/greeting")
 async def voice_greeting():
@@ -730,41 +741,47 @@ async def voice_greeting():
 
 @app.post("/api/voice/order")
 async def voice_order(request: Request):
-    """Send confirmed voice order to Telegram (lightweight, no DB validation)."""
+    """Send confirmed voice order to Telegram via httpx (async, no DB)."""
     body = await request.json()
-    table_number = body.get("table_number", "?")
+    table_number = body.get("table_number", "T01")
     items = body.get("items", [])
     total = body.get("total", 0)
 
     if not items:
         return {"success": False, "error": "No items"}
 
-    now = datetime.now().strftime('%H:%M %d/%m/%Y')
-
-    items_text = ""
-    for item in items:
-        qty = item.get("quantity", item.get("qty", 1))
-        price = item.get("price", 0)
-        line_total = price * qty
-        items_text += f"  • {item['name']} x{qty} - RM{line_total:.2f}\n"
+    items_text = "\n".join([
+        f"  • {i['name']} x{i.get('quantity', i.get('qty', 1))} "
+        f"- RM{i.get('price', 0) * i.get('quantity', i.get('qty', 1)):.2f}"
+        for i in items
+    ])
 
     message = (
         f"🎤 VOICE ORDER - TABLE {table_number}\n"
-        f"⏰ {now}\n\n"
-        f"{items_text}\n"
+        f"⏰ {datetime.now().strftime('%I:%M %p')}\n\n"
+        f"{items_text}\n\n"
         f"💰 TOTAL: RM{total:.2f}\n\n"
-        f"Please key into POS."
+        f"➡️ Please key into POS"
     )
 
-    # Send to cashier
-    if CASHIER_CHAT_ID:
-        send_message(CASHIER_CHAT_ID, message)
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    cashier_id = os.getenv("CASHIER_CHAT_ID", CASHIER_CHAT_ID)
+    owner_id = os.getenv("OWNER_CHAT_ID", OWNER_CHAT_ID)
 
-    # Send to owner if different
-    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
-        send_message(OWNER_CHAT_ID, message)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            if cashier_id:
+                resp = await client.post(url, json={"chat_id": cashier_id, "text": message})
+                print(f"Telegram voice order sent to cashier: {resp.status_code}")
+            if owner_id and owner_id != cashier_id:
+                resp = await client.post(url, json={"chat_id": owner_id, "text": message})
+                print(f"Telegram voice order sent to owner: {resp.status_code}")
+    except Exception as e:
+        print(f"Error sending voice order to Telegram: {e}")
+        return {"success": False, "error": str(e)}
 
-    return {"success": True}
+    return {"success": True, "message": message}
 
 @app.post("/api/voice/submit-order")
 async def voice_submit_order(req: VoiceSubmitOrder):
