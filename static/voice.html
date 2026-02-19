@@ -445,6 +445,7 @@ function esc(s) {
 async function processMessage(text) {
     addMessage('user', text);
     showTyping();
+    console.log('[VOICE] Processing:', text, '| Current order:', JSON.stringify(order));
 
     try {
         const res = await fetch('/api/voice/chat', {
@@ -454,6 +455,7 @@ async function processMessage(text) {
         });
         const data = await res.json();
         hideTyping();
+        console.log('[VOICE] Engine response:', data.action, data);
 
         addMessage('ai', data.text);
 
@@ -609,29 +611,44 @@ async function sendOrderToTelegram() {
 
     const items = order.map(i => ({
         name: i.name,
+        qty: i.qty || 1,
         quantity: i.qty || 1,
         price: i.price || 0
     }));
     const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
 
+    const payload = {
+        table_number: TABLE,
+        items: items,
+        total: total
+    };
+    console.log('[VOICE] Submitting order to Telegram:', JSON.stringify(payload));
+
     try {
-        await fetch('/api/voice/order', {
+        const res = await fetch('/api/voice/order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                table_number: TABLE,
-                items: items,
-                total: total
-            })
+            body: JSON.stringify(payload)
         });
+        const data = await res.json();
+        console.log('[VOICE] Order response:', res.status, data);
+
+        if (!res.ok || data.success === false) {
+            console.error('[VOICE] Order failed:', data.error || res.statusText);
+            addMessage('ai', 'Maaf, ada masalah hantar order. Cuba lagi.');
+            showOrderPanel();
+            resumeMic();
+            return;
+        }
 
         // Show success overlay
         document.getElementById('successOverlay').classList.add('show');
+        console.log('[VOICE] Order sent successfully!');
 
         // Play thank you audio
         try { await playSingleAudio('/audio/wavs/0021.wav'); } catch(e) {}
 
-        // Reset after 5 seconds
+        // Reset after 5 seconds — DO NOT reset earlier
         setTimeout(() => {
             document.getElementById('successOverlay').classList.remove('show');
             order = [];
@@ -641,7 +658,9 @@ async function sendOrderToTelegram() {
             resumeMic();
         }, 5000);
     } catch(e) {
+        console.error('[VOICE] Order fetch error:', e);
         addMessage('ai', 'Maaf, ada masalah hantar order. Cuba lagi.');
+        showOrderPanel();
         resumeMic();
     }
 }
