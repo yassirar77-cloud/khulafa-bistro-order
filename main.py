@@ -256,14 +256,14 @@ async def create_order(order: CreateOrder):
     # Send message with buttons
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
-        "chat_id": -1003483753298,
+        "chat_id": CASHIER_CHAT_ID,
         "text": order_text,
         "reply_markup": inline_keyboard
     }
-    
+
     try:
         response = requests.post(url, json=payload)
-        print(f"Order sent to group with buttons: {response.text}")
+        print(f"Order sent to cashier with buttons: {response.text}")
     except Exception as e:
         print(f"Error sending order: {e}")
 
@@ -422,7 +422,7 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
             requests.post(
                 f"{TELEGRAM_API}/sendPhoto",
                 data={
-                    'chat_id': -1003483753298,
+                    'chat_id': CASHIER_CHAT_ID,
                     'caption': f"💳 Payment Receipt\nOrder #{order['order_number']}\nCustomer: {order['customer_name']}\nTotal: RM{order['total_price']:.2f}"
                 },
                 files={'photo': photo}
@@ -714,10 +714,6 @@ async def voice_chat(request: Request):
         "has_audio": len(audio_matches) > 0,
     }
 
-    # Pass through text-only suggestion (no audio)
-    if result.get("text_suggestion"):
-        response["text_suggestion"] = result["text_suggestion"]
-
     # Pass through disambiguation options
     if result.get("disambiguate"):
         response["disambiguate"] = result["disambiguate"]
@@ -751,7 +747,7 @@ async def voice_order(request: Request):
         return {"success": False, "error": "No items"}
 
     items_text = "\n".join([
-        f"  • {i['name']} x{i.get('quantity', i.get('qty', 1))} "
+        f"• {i['name']} x{i.get('quantity', i.get('qty', 1))} "
         f"- RM{i.get('price', 0) * i.get('quantity', i.get('qty', 1)):.2f}"
         for i in items
     ])
@@ -760,8 +756,7 @@ async def voice_order(request: Request):
         f"🎤 VOICE ORDER - TABLE {table_number}\n"
         f"⏰ {datetime.now().strftime('%I:%M %p')}\n\n"
         f"{items_text}\n\n"
-        f"💰 TOTAL: RM{total:.2f}\n\n"
-        f"➡️ Please key into POS"
+        f"💰 TOTAL: RM{total:.2f}"
     )
 
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)

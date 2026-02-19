@@ -27,29 +27,6 @@ END_PHRASES = [
     "settle", "setel",
 ]
 
-# Recommendation phrases — only triggered when customer explicitly asks
-RECOMMEND_PHRASES = [
-    "apa sedap", "apa yang sedap", "apa best",
-    "recommend", "rekomen", "cadang", "cadangkan",
-    "apa popular", "apa laris", "bestseller", "best seller",
-    "suggest", "apa bagus", "menu popular",
-    "nak tahu apa sedap", "apa favourite",
-]
-
-# Text-only add-on hints (shown in chat, NOT played as audio)
-ADDON_HINTS = {
-    "briyani ayam":       "Nak set? Briyani Ayam Bawang Set RM15",
-    "briyani kambing":    "Nak set? Briyani Kambing Set RM20",
-    "briyani daging":     "Nak set? Briyani Daging Set RM18",
-    "nasi ayam":          "Tambah bawang? Nasi Ayam Bawang RM9",
-    "nasi ayam sayur":    "Tambah bawang? Nasi Ayam Bawang Sayur RM10",
-    "roti canai":         "Tambah telur? Roti Telur RM3",
-    "naan biasa":         "Upgrade cheese? Naan Cheese RM5",
-    "naan butter":        "Upgrade garlic? Naan Butter Garlic RM4.50",
-    "nasi goreng biasa":  "Upgrade mamak? Nasi Goreng Mamak RM8",
-    "nasi goreng kampung": "Tambah telur? Ayam Goreng RM6",
-}
-
 # Full menu: name → (audio_id, price)
 MENU = {
     # === ROTI ===
@@ -104,6 +81,7 @@ MENU = {
 
     # === BRIYANI ===
     "briyani ayam bawang set":  ("0178", 15.00),
+    "briyani ayam bawang":      ("0182", 11.00),
     "briyani ayam goreng set":  ("0180", 14.00),
     "briyani ayam":             ("0181", 10.00),
     "briyani kambing set":      ("0184", 20.00),
@@ -159,9 +137,9 @@ class OrderEngine:
 
         if not text:
             return self._response(
-                text="Maaf, saya tak dengar. Boleh ulang?",
-                audio_ids=["0043"],
-                action="no_input",
+                text="Maaf, boleh ulang?",
+                audio_ids=["0045"],
+                action="unknown",
                 order=current_order,
             )
 
@@ -169,27 +147,18 @@ class OrderEngine:
         if self._matches_phrase(text, END_PHRASES):
             return self._build_confirm(current_order)
 
-        # 2. Check for recommendation request (ONLY when customer explicitly asks)
-        if self._matches_phrase(text, RECOMMEND_PHRASES):
-            return self._response(
-                text="Bestseller kami nasi ayam bawang, roti canai, dan maggi goreng.",
-                audio_ids=["0038", "0043"],
-                action="recommend",
-                order=current_order,
-            )
-
-        # 3. Extract menu items from speech
+        # 2. Extract menu items from speech
         found_items = self._extract_items(text)
 
         if not found_items:
             return self._response(
-                text="Maaf, saya tak pasti apa yang anda nak. Boleh ulang?",
-                audio_ids=["0043"],
-                action="not_found",
+                text="Maaf, boleh ulang?",
+                audio_ids=["0045"],
+                action="unknown",
                 order=current_order,
             )
 
-        # 4. Check for ambiguous matches (partial speech → multiple possible items)
+        # 3. Check for ambiguous matches (partial speech → multiple possible items)
         ambiguous = self._find_ambiguous(found_items)
         if ambiguous:
             ambiguous_names = {a["matched"] for a in ambiguous}
@@ -199,15 +168,8 @@ class OrderEngine:
             ]
             return self._build_disambiguate(ambiguous, clear_items, current_order)
 
-        # 5. Build response — item names + "Ada lagi?" only
-        result = self._build_add_items(found_items, current_order)
-
-        # 6. Add text-only add-on hint (no audio, shown in chat only)
-        hint = self._get_addon_hint(found_items)
-        if hint:
-            result["text_suggestion"] = hint
-
-        return result
+        # 4. Build response — item audio + "Ada lagi?" only, nothing else
+        return self._build_add_items(found_items, current_order)
 
     def get_greeting(self) -> dict:
         """Return time-appropriate greeting with audio IDs."""
@@ -309,6 +271,13 @@ class OrderEngine:
 
                 start = idx + klen
 
+        # Debug: show what items were matched from the speech text
+        if results:
+            matched_names = [f"{name} (qty={qty}, audio={aid})" for name, qty, aid, _ in results]
+            print(f"[OrderEngine] Speech: '{text}' → Matched: {matched_names}")
+        else:
+            print(f"[OrderEngine] Speech: '{text}' → No items matched")
+
         return results
 
     def _find_ambiguous(self, found_items: list) -> list:
@@ -352,14 +321,6 @@ class OrderEngine:
                     "options": alternatives,
                 })
         return ambiguous
-
-    @staticmethod
-    def _get_addon_hint(found_items: list) -> str | None:
-        """Return a text-only add-on suggestion (no audio) for the ordered items."""
-        for name, qty, audio_id, price in found_items:
-            if name in ADDON_HINTS:
-                return ADDON_HINTS[name]
-        return None
 
     def _build_disambiguate(self, ambiguous: list, clear_items: list,
                             current_order: list) -> dict:
@@ -474,7 +435,7 @@ class OrderEngine:
         )
 
         return self._response(
-            text=f"Okay, pesanan anda: {items_text}. Jumlah RM{total:.2f}. Terima kasih!",
+            text="Terima kasih! Order dihantar.",
             audio_ids=["0021"],
             action="confirm_order",
             order=current_order,
@@ -483,7 +444,7 @@ class OrderEngine:
 
     @staticmethod
     def _response(text, audio_ids, action, order=None, new_items=None, total=0,
-                  text_suggestion=None, disambiguate=None):
+                  disambiguate=None):
         result = {
             "text": text,
             "audio_ids": audio_ids,
@@ -492,8 +453,6 @@ class OrderEngine:
             "order": order or [],
             "total": total,
         }
-        if text_suggestion:
-            result["text_suggestion"] = text_suggestion
         if disambiguate:
             result["disambiguate"] = disambiguate
         return result
