@@ -5,5 +5,6 @@ typing_extensions>=4.7.0
 python-dotenv
 aiohttp
 requests
+httpx
 pillow
 sqlalchemy

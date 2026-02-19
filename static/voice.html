@@ -188,6 +188,27 @@
         @keyframes checkPop{from{transform:scale(0)}to{transform:scale(1)}}
         .success-text{font-size:22px;font-weight:700;color:#fff}
         .success-sub{font-size:14px;color:#666}
+
+        /* ===== DISAMBIGUATION BUTTONS ===== */
+        .disambig-wrap{
+            display:flex;flex-direction:column;gap:6px;
+            padding:4px 0;
+        }
+        .disambig-btn{
+            display:block;width:100%;text-align:left;
+            padding:10px 14px;border:1px solid #2A2A2A;border-radius:12px;
+            background:#1A1A1A;color:#ECECEC;font-size:14px;font-weight:500;
+            font-family:inherit;cursor:pointer;transition:background .15s,border-color .15s;
+        }
+        .disambig-btn:active{background:#2A2A2A;border-color:#F97316}
+        .disambig-price{color:#F97316;font-weight:600;float:right}
+
+        /* ===== TEXT SUGGESTION (no audio) ===== */
+        .suggestion-bubble{
+            padding:8px 14px;border-radius:14px;font-size:13px;
+            background:#1A1A1A;color:#888;border:1px dashed #333;
+            margin-left:38px;max-width:80%;
+        }
     </style>
 </head>
 <body>
@@ -436,27 +457,47 @@ async function processMessage(text) {
 
         addMessage('ai', data.text);
 
-        // Update order from engine response
+        // Handle disambiguation — show clickable buttons
+        if (data.action === 'disambiguate' && data.disambiguate) {
+            // Add any clear (non-ambiguous) items that were included
+            if (data.new_items && data.new_items.length) {
+                order = data.order || order;
+                updateOrderPanel();
+            }
+            showDisambiguationButtons(data.disambiguate);
+            // Play audio only for clear items (no audio for disambiguation)
+            if (data.has_audio && data.audio_matches && data.audio_matches.length) {
+                await playAudioSequence(data.audio_matches);
+            } else {
+                resumeMic();
+            }
+            return;
+        }
+
+        // Handle add_items — update order + show panel
         if (data.action === 'add_items' && data.new_items && data.new_items.length) {
             order = data.order || order;
             updateOrderPanel();
             showOrderPanel();
-        } else if (data.action === 'confirm_order' && order.length > 0) {
-            order = data.order || order;
-            updateOrderPanel();
+
+            // Show text-only add-on suggestion (no audio)
+            if (data.text_suggestion) {
+                addTextSuggestion(data.text_suggestion);
+            }
         }
 
-        // Play audio response
+        // Handle confirm_order — show order panel, DON'T auto-submit
+        if (data.action === 'confirm_order' && order.length > 0) {
+            order = data.order || order;
+            updateOrderPanel();
+            showOrderPanel();
+        }
+
+        // Play audio response (item names + "Ada lagi?" only)
         if (data.has_audio && data.audio_matches && data.audio_matches.length) {
             await playAudioSequence(data.audio_matches);
         } else {
             resumeMic();
-        }
-
-        // Auto-submit to Telegram when confirmed
-        if (data.action === 'confirm_order' && order.length > 0) {
-            await sendOrderToTelegram();
-            return;
         }
 
     } catch(e) {
@@ -464,6 +505,57 @@ async function processMessage(text) {
         addMessage('ai', 'Maaf, ada masalah. Cuba lagi.');
         resumeMic();
     }
+}
+
+// ===== DISAMBIGUATION UI =====
+function showDisambiguationButtons(disambiguateData) {
+    const chat = document.getElementById('chat');
+    disambiguateData.forEach(group => {
+        const div = document.createElement('div');
+        div.className = 'msg ai';
+        div.style.maxWidth = '92%';
+
+        const ic = document.createElement('div');
+        ic.className = 'ic';
+        ic.textContent = 'A';
+        div.appendChild(ic);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'disambig-wrap';
+
+        group.options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'disambig-btn';
+            btn.innerHTML = esc(opt.name) + ' <span class="disambig-price">RM' + opt.price.toFixed(2) + '</span>';
+            btn.addEventListener('click', () => {
+                // Remove all disambiguation buttons
+                document.querySelectorAll('.disambig-wrap').forEach(el => {
+                    const parent = el.closest('.msg');
+                    if (parent) parent.remove();
+                });
+                // Process the selected item directly
+                const qty = group.qty || 1;
+                const itemText = qty > 1 ? qty + ' ' + opt.name.toLowerCase() : opt.name.toLowerCase();
+                processMessage(itemText);
+            });
+            wrap.appendChild(btn);
+        });
+
+        div.appendChild(wrap);
+        chat.appendChild(div);
+    });
+    chat.scrollTop = chat.scrollHeight;
+}
+
+// ===== TEXT SUGGESTION (no audio) =====
+function addTextSuggestion(text) {
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = 'msg ai';
+    div.style.animation = 'msgIn .3s ease';
+    div.innerHTML = '<div class="ic" style="visibility:hidden">A</div><div class="suggestion-bubble">' + esc(text) + '</div>';
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
 }
 
 // ===== ORDER PANEL =====
