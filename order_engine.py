@@ -107,6 +107,20 @@ MENU = {
     "daging rendang":           ("0258", 10.00),
 }
 
+# Convert tuple format to dict format for consistent access
+MENU = {k: {"audio_id": v[0], "price": v[1]} for k, v in MENU.items()}
+
+# Common audio responses used across the app
+AUDIO_RESPONSES = {
+    "ada_lagi": "0043",
+    "terima_kasih": "0021",
+    "boleh_ulang": "0045",
+    "greeting_pagi": "0005",
+    "greeting_tengahari": "0006",
+    "greeting_petang": "0007",
+    "greeting_malam": "0008",
+}
+
 # Pre-sorted menu keys by length descending (greedy matching)
 _SORTED_KEYS = sorted(MENU.keys(), key=len, reverse=True)
 
@@ -266,7 +280,8 @@ class OrderEngine:
                     elif after_first in MALAY_NUMBERS:
                         qty = MALAY_NUMBERS[after_first]
 
-                audio_id, price = MENU[key]
+                audio_id = MENU[key]["audio_id"]
+                price = MENU[key]["price"]
                 results.append((key, qty, audio_id, price))
 
                 start = idx + klen
@@ -302,7 +317,7 @@ class OrderEngine:
                 # with a different word (different category)
                 other_first = menu_key.split()[0]
                 if other_first != first_word:
-                    alt_audio, alt_price = MENU[menu_key]
+                    alt_price = MENU[menu_key]["price"]
                     alternatives.append({
                         "name": menu_key.title(),
                         "price": alt_price,
