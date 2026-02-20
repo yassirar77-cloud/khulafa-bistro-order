@@ -35,8 +35,8 @@ def get_claude_client():
 def _build_menu_list() -> str:
     """Build a flat menu list string from the MENU dict for the system prompt."""
     lines = []
-    for name, (audio_id, price) in MENU.items():
-        lines.append(f"- {name} (RM{price:.2f})")
+    for name, item in MENU.items():
+        lines.append(f"- {name} (RM{item['price']:.2f})")
     return "\n".join(lines)
 
 AISHA_SYSTEM_PROMPT = f"""You are Aisha, a restaurant order taker at Khulafa Bistro. You ONLY do these things:
@@ -739,150 +739,107 @@ async def serve_voice_page(table_number: str):
 
 @app.post("/api/voice/chat")
 async def voice_chat(request: Request):
-    """Process voice chat using Claude API brain + pre-recorded audio voice.
+    import anthropic
+    import json as json_lib
 
-    Claude understands messy speech; rule engine is the fallback.
-    """
     body = await request.json()
-    speech_text = body.get("message", "")
+    speech = body.get("message", "")
     current_order = body.get("order", [])
+    table = body.get("table_number", "T01")
 
-    # ---------- Try Claude API first ----------
-    client = get_claude_client()
-    if client and speech_text.strip():
-        try:
-            claude_resp = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=100,
-                system=AISHA_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": speech_text}],
-            )
-            raw = claude_resp.content[0].text.strip()
-            print(f"[Claude] Raw response: {raw}")
+    # Get menu items list
+    menu_names = list(MENU.keys()) if 'MENU' in dir() else []
+    if not menu_names:
+        from order_engine import MENU
+        menu_names = list(MENU.keys())
 
-            # Parse JSON from Claude (strip markdown fences if present)
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            parsed = json.loads(raw)
+    menu_list = ", ".join(menu_names)
 
-            action = parsed.get("action", "unclear")
-            reply_text = parsed.get("reply", "")
-            claude_items = parsed.get("items", [])
+    client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY"))
 
-            # --- Build structured response from Claude's parsed items ---
-            if action == "add_items" and claude_items:
-                new_items = []
-                audio_ids = []
-                tts_names = []  # items without pre-recorded audio
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=80,
+        system=f"""You extract food orders. Reply ONLY in JSON.
 
-                for item_name in claude_items:
-                    item_lower = item_name.strip().lower()
-                    if item_lower in MENU:
-                        audio_id, price = MENU[item_lower]
-                        new_items.append({"name": item_lower.title(), "qty": 1, "price": price})
-                        audio_ids.append(audio_id)
-                    else:
-                        # Item not in MENU — still add, but flag for TTS
-                        new_items.append({"name": item_name.title(), "qty": 1, "price": 0})
-                        tts_names.append(item_name.title())
+MENU: {menu_list}
 
-                # Append "Ada lagi?" audio
-                audio_ids.append("0043")
+RULES:
+- Extract item names customer ordered from their speech
+- Match to closest menu item even if misspelled
+- NEVER suggest or recommend other items
+- NEVER mention items customer did not say
 
-                # Merge into current order
-                updated_order = list(current_order)
-                for item in new_items:
-                    merged = False
-                    for existing in updated_order:
-                        if existing.get("name", "").lower() == item["name"].lower():
-                            existing["qty"] = existing.get("qty", 1) + item["qty"]
-                            merged = True
-                            break
-                    if not merged:
-                        updated_order.append(dict(item))
+If customer orders items, reply:
+{{"items":["item1","item2"],"action":"add","reply":"Item1 dan Item2. Ada lagi?"}}
 
-                total = sum(i.get("price", 0) * i.get("qty", 1) for i in updated_order)
+If customer says tu je/cukup/dah/hantar/confirm/settle:
+{{"items":[],"action":"confirm","reply":"Terima kasih!"}}
 
-                audio_matches = [
-                    {"audio_path": f"/audio/wavs/{aid}.wav", "audio_exists": True}
-                    for aid in audio_ids
-                ]
+If unclear:
+{{"items":[],"action":"unclear","reply":"Maaf, boleh ulang?"}}
 
-                return {
-                    "text": reply_text or f"{', '.join(i['name'] for i in new_items)}. Ada lagi?",
-                    "audio_matches": audio_matches,
-                    "action": "add_items",
-                    "new_items": new_items,
-                    "order": updated_order,
-                    "total": total,
-                    "has_audio": len(audio_matches) > 0,
-                    "tts_names": tts_names,  # frontend uses browser TTS for these
-                }
+JSON only. No other text.""",
+        messages=[{"role": "user", "content": speech}]
+    )
 
-            elif action == "confirm_order":
-                if not current_order:
-                    return {
-                        "text": "Anda belum order apa-apa lagi. Nak order apa?",
-                        "audio_matches": [{"audio_path": "/audio/wavs/0043.wav", "audio_exists": True}],
-                        "action": "no_items",
-                        "new_items": [],
-                        "order": [],
-                        "total": 0,
-                        "has_audio": True,
-                        "tts_names": [],
-                    }
-                total = sum(i.get("price", 0) * i.get("qty", 1) for i in current_order)
-                return {
-                    "text": reply_text or "Terima kasih! Order dihantar.",
-                    "audio_matches": [{"audio_path": "/audio/wavs/0021.wav", "audio_exists": True}],
-                    "action": "confirm_order",
-                    "new_items": [],
-                    "order": current_order,
-                    "total": total,
-                    "has_audio": True,
-                    "tts_names": [],
-                }
+    # Parse response
+    raw = response.content[0].text.strip()
+    try:
+        data = json_lib.loads(raw)
+    except:
+        # Try to extract JSON from response
+        import re
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if match:
+            data = json_lib.loads(match.group())
+        else:
+            data = {"items": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}
 
-            else:
-                # unclear — ask to repeat
-                return {
-                    "text": reply_text or "Maaf, boleh ulang?",
-                    "audio_matches": [{"audio_path": "/audio/wavs/0045.wav", "audio_exists": True}],
-                    "action": "unknown",
-                    "new_items": [],
-                    "order": current_order,
-                    "total": sum(i.get("price", 0) * i.get("qty", 1) for i in current_order),
-                    "has_audio": True,
-                    "tts_names": [],
-                }
+    items = data.get("items", [])
+    action = data.get("action", "unclear")
+    reply = data.get("reply", "")
 
-        except Exception as e:
-            print(f"[Claude] Error — falling back to rule engine: {e}")
+    # Look up audio for matched items
+    from order_engine import MENU, AUDIO_RESPONSES
+    audio_matches = []
+    new_items = []
 
-    # ---------- Fallback: rule-based engine ----------
-    engine = get_engine()
-    result = engine.process(speech_text, current_order)
+    for item_name in items:
+        item_lower = item_name.lower().strip()
+        if item_lower in MENU:
+            menu_item = MENU[item_lower]
+            audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
+            new_items.append({"name": item_name.title(), "qty": 1, "price": menu_item["price"]})
 
-    audio_matches = [
-        {"audio_path": f"/audio/wavs/{aid}.wav", "audio_exists": True}
-        for aid in result.get("audio_ids", [])
-    ]
+    # Add "ada lagi?" audio only for add action
+    if action == "add" and new_items:
+        audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
 
-    response = {
-        "text": result["text"],
+    # Add terima kasih audio for confirm
+    if action == "confirm":
+        audio_matches.append({"audio_path": "/audio/wavs/0021.wav", "audio_exists": True})
+
+    # Update order
+    updated_order = list(current_order)
+    for ni in new_items:
+        existing = next((i for i in updated_order if i["name"].lower() == ni["name"].lower()), None)
+        if existing:
+            existing["qty"] += 1
+        else:
+            updated_order.append(ni)
+
+    total = sum(i["price"] * i["qty"] for i in updated_order)
+
+    return {
+        "text": reply,
         "audio_matches": audio_matches,
-        "action": result["action"],
-        "new_items": result.get("new_items", []),
-        "order": result.get("order", []),
-        "total": result.get("total", 0),
         "has_audio": len(audio_matches) > 0,
-        "tts_names": [],
+        "action": action,
+        "new_items": new_items,
+        "order": updated_order,
+        "total": total
     }
-
-    if result.get("disambiguate"):
-        response["disambiguate"] = result["disambiguate"]
-
-    return response
 
 @app.get("/api/voice/greeting")
 async def voice_greeting():
