@@ -857,47 +857,46 @@ async def voice_greeting():
     }
 
 @app.post("/api/voice/order")
-async def voice_order(request: Request):
-    """Send confirmed voice order to Telegram via httpx (async, no DB)."""
+async def submit_voice_order(request: Request):
+    import httpx
+
     body = await request.json()
-    table_number = body.get("table_number", "T01")
+    table = body.get("table_number", "T01")
     items = body.get("items", [])
     total = body.get("total", 0)
 
     if not items:
-        return {"success": False, "error": "No items"}
+        return {"status": "error", "message": "No items"}
 
-    items_text = "\n".join([
-        f"• {i['name']} x{i.get('quantity', i.get('qty', 1))} "
-        f"- RM{i.get('price', 0) * i.get('quantity', i.get('qty', 1)):.2f}"
-        for i in items
-    ])
+    items_text = "\n".join([f"  • {i['name']} x{i['qty']} - RM{i['price'] * i['qty']:.2f}" for i in items])
 
-    message = (
-        f"🎤 VOICE ORDER - TABLE {table_number}\n"
-        f"⏰ {datetime.now().strftime('%I:%M %p')}\n\n"
-        f"{items_text}\n\n"
-        f"💰 TOTAL: RM{total:.2f}"
-    )
+    message = f"""🎤 VOICE ORDER - MEJA {table}
+⏰ {datetime.now().strftime('%I:%M %p')}
 
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
-    cashier_id = os.getenv("CASHIER_CHAT_ID", CASHIER_CHAT_ID)
-    owner_id = os.getenv("OWNER_CHAT_ID", OWNER_CHAT_ID)
+{items_text}
+
+💰 TOTAL: RM{total:.2f}
+
+➡️ Sila key into POS"""
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    cashier_id = os.getenv("CASHIER_CHAT_ID")
+    owner_id = os.getenv("OWNER_CHAT_ID")
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient() as client:
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-            if cashier_id:
-                resp = await client.post(url, json={"chat_id": cashier_id, "text": message})
-                print(f"Telegram voice order sent to cashier: {resp.status_code}")
-            if owner_id and owner_id != cashier_id:
-                resp = await client.post(url, json={"chat_id": owner_id, "text": message})
-                print(f"Telegram voice order sent to owner: {resp.status_code}")
-    except Exception as e:
-        print(f"Error sending voice order to Telegram: {e}")
-        return {"success": False, "error": str(e)}
+            r1 = await client.post(url, json={"chat_id": cashier_id, "text": message})
+            print(f"Telegram cashier: {r1.status_code} {r1.text}")
 
-    return {"success": True, "message": message}
+            if owner_id and str(owner_id) != str(cashier_id):
+                r2 = await client.post(url, json={"chat_id": owner_id, "text": message})
+                print(f"Telegram owner: {r2.status_code} {r2.text}")
+    except Exception as e:
+        print(f"Telegram error: {e}")
+        return {"status": "error", "message": str(e)}
+
+    return {"status": "sent", "table": table, "total": total}
 
 @app.post("/api/voice/submit-order")
 async def voice_submit_order(req: VoiceSubmitOrder):
