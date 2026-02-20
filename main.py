@@ -12,11 +12,62 @@ import httpx
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
-from order_engine import get_engine
+from order_engine import get_engine, MENU
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
+import anthropic
+
+# ========== Claude API Setup ==========
+_claude_client = None
+
+def get_claude_client():
+    """Lazy-init Anthropic client."""
+    global _claude_client
+    if _claude_client is None:
+        api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            return None
+        _claude_client = anthropic.Anthropic(api_key=api_key)
+    return _claude_client
+
+def _build_menu_list() -> str:
+    """Build a flat menu list string from the MENU dict for the system prompt."""
+    lines = []
+    for name, (audio_id, price) in MENU.items():
+        lines.append(f"- {name} (RM{price:.2f})")
+    return "\n".join(lines)
+
+AISHA_SYSTEM_PROMPT = f"""You are Aisha, a restaurant order taker at Khulafa Bistro. You ONLY do these things:
+
+RULES:
+1. Extract menu item names from customer speech (even if misspelled, slang, or unclear Malay)
+2. Reply with ONLY the item names and 'Ada lagi?' - nothing else
+3. NEVER suggest other menu items
+4. NEVER recommend anything unless customer asks 'apa sedap?' or 'recommend apa?'
+5. When customer says 'tu je/cukup/dah/hantar/confirm/settle/setel/sekian', reply with ONLY: CONFIRM_ORDER
+6. Keep response under 15 words maximum
+7. Understand common Malay speech patterns, slang, misspellings (e.g. 'minggu ring' = 'mi goreng', 'teh o aih' = 'teh o ais', 'rotikan ai' = 'roti canai')
+
+MENU ITEMS:
+{_build_menu_list()}
+
+RESPONSE FORMAT - Always respond in this EXACT JSON format, nothing else:
+
+For ordering items:
+{{"items": ["roti canai", "maggi goreng"], "action": "add_items", "reply": "Roti Canai dan Maggi Goreng. Ada lagi?"}}
+
+If customer confirms order:
+{{"items": [], "action": "confirm_order", "reply": "Terima kasih! Order dihantar."}}
+
+If you cannot understand:
+{{"items": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}}
+
+IMPORTANT:
+- Item names in the "items" array MUST be lowercase and match the menu item names exactly when possible
+- If customer orders something not on the menu, still include it in items array with best-guess name
+- Always respond with valid JSON only, no extra text before or after"""
 
 # Telegram Bot Configuration
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78")
@@ -688,21 +739,134 @@ async def serve_voice_page(table_number: str):
 
 @app.post("/api/voice/chat")
 async def voice_chat(request: Request):
-    """Process voice chat with rule-based ordering engine (zero API cost)."""
-    engine = get_engine()
+    """Process voice chat using Claude API brain + pre-recorded audio voice.
+
+    Claude understands messy speech; rule engine is the fallback.
+    """
     body = await request.json()
     speech_text = body.get("message", "")
     current_order = body.get("order", [])
 
+    # ---------- Try Claude API first ----------
+    client = get_claude_client()
+    if client and speech_text.strip():
+        try:
+            claude_resp = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=100,
+                system=AISHA_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": speech_text}],
+            )
+            raw = claude_resp.content[0].text.strip()
+            print(f"[Claude] Raw response: {raw}")
+
+            # Parse JSON from Claude (strip markdown fences if present)
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+            parsed = json.loads(raw)
+
+            action = parsed.get("action", "unclear")
+            reply_text = parsed.get("reply", "")
+            claude_items = parsed.get("items", [])
+
+            # --- Build structured response from Claude's parsed items ---
+            if action == "add_items" and claude_items:
+                new_items = []
+                audio_ids = []
+                tts_names = []  # items without pre-recorded audio
+
+                for item_name in claude_items:
+                    item_lower = item_name.strip().lower()
+                    if item_lower in MENU:
+                        audio_id, price = MENU[item_lower]
+                        new_items.append({"name": item_lower.title(), "qty": 1, "price": price})
+                        audio_ids.append(audio_id)
+                    else:
+                        # Item not in MENU — still add, but flag for TTS
+                        new_items.append({"name": item_name.title(), "qty": 1, "price": 0})
+                        tts_names.append(item_name.title())
+
+                # Append "Ada lagi?" audio
+                audio_ids.append("0043")
+
+                # Merge into current order
+                updated_order = list(current_order)
+                for item in new_items:
+                    merged = False
+                    for existing in updated_order:
+                        if existing.get("name", "").lower() == item["name"].lower():
+                            existing["qty"] = existing.get("qty", 1) + item["qty"]
+                            merged = True
+                            break
+                    if not merged:
+                        updated_order.append(dict(item))
+
+                total = sum(i.get("price", 0) * i.get("qty", 1) for i in updated_order)
+
+                audio_matches = [
+                    {"audio_path": f"/audio/wavs/{aid}.wav", "audio_exists": True}
+                    for aid in audio_ids
+                ]
+
+                return {
+                    "text": reply_text or f"{', '.join(i['name'] for i in new_items)}. Ada lagi?",
+                    "audio_matches": audio_matches,
+                    "action": "add_items",
+                    "new_items": new_items,
+                    "order": updated_order,
+                    "total": total,
+                    "has_audio": len(audio_matches) > 0,
+                    "tts_names": tts_names,  # frontend uses browser TTS for these
+                }
+
+            elif action == "confirm_order":
+                if not current_order:
+                    return {
+                        "text": "Anda belum order apa-apa lagi. Nak order apa?",
+                        "audio_matches": [{"audio_path": "/audio/wavs/0043.wav", "audio_exists": True}],
+                        "action": "no_items",
+                        "new_items": [],
+                        "order": [],
+                        "total": 0,
+                        "has_audio": True,
+                        "tts_names": [],
+                    }
+                total = sum(i.get("price", 0) * i.get("qty", 1) for i in current_order)
+                return {
+                    "text": reply_text or "Terima kasih! Order dihantar.",
+                    "audio_matches": [{"audio_path": "/audio/wavs/0021.wav", "audio_exists": True}],
+                    "action": "confirm_order",
+                    "new_items": [],
+                    "order": current_order,
+                    "total": total,
+                    "has_audio": True,
+                    "tts_names": [],
+                }
+
+            else:
+                # unclear — ask to repeat
+                return {
+                    "text": reply_text or "Maaf, boleh ulang?",
+                    "audio_matches": [{"audio_path": "/audio/wavs/0045.wav", "audio_exists": True}],
+                    "action": "unknown",
+                    "new_items": [],
+                    "order": current_order,
+                    "total": sum(i.get("price", 0) * i.get("qty", 1) for i in current_order),
+                    "has_audio": True,
+                    "tts_names": [],
+                }
+
+        except Exception as e:
+            print(f"[Claude] Error — falling back to rule engine: {e}")
+
+    # ---------- Fallback: rule-based engine ----------
+    engine = get_engine()
     result = engine.process(speech_text, current_order)
 
-    # Convert audio_ids to audio paths
-    audio_matches = []
-    for aid in result.get("audio_ids", []):
-        audio_matches.append({
-            "audio_path": f"/audio/wavs/{aid}.wav",
-            "audio_exists": True,
-        })
+    audio_matches = [
+        {"audio_path": f"/audio/wavs/{aid}.wav", "audio_exists": True}
+        for aid in result.get("audio_ids", [])
+    ]
 
     response = {
         "text": result["text"],
@@ -712,9 +876,9 @@ async def voice_chat(request: Request):
         "order": result.get("order", []),
         "total": result.get("total", 0),
         "has_audio": len(audio_matches) > 0,
+        "tts_names": [],
     }
 
-    # Pass through disambiguation options
     if result.get("disambiguate"):
         response["disambiguate"] = result["disambiguate"]
 

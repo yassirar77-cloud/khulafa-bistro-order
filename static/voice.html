@@ -382,10 +382,19 @@ function setMicState(state, customText) {
 }
 
 // ===== AUDIO PLAYBACK =====
-async function playAudioSequence(matches) {
+async function playAudioSequence(matches, ttsNames) {
     isPlaying = true;
     pauseMic();
     setMicState('playing');
+
+    // Play TTS for items without pre-recorded audio first
+    if (ttsNames && ttsNames.length > 0) {
+        for (const name of ttsNames) {
+            try { await speakTTS(name); } catch(e) { console.warn('[TTS] Error:', e); }
+        }
+    }
+
+    // Then play pre-recorded audio files
     for (const m of matches) {
         if (m.audio_exists !== false) {
             try { await playSingleAudio(m.audio_path); } catch(e) {}
@@ -403,6 +412,18 @@ function playSingleAudio(path) {
         audio.onended = () => { currentAudio = null; resolve(); };
         audio.onerror = () => { currentAudio = null; reject(); };
         audio.play().catch(reject);
+    });
+}
+
+function speakTTS(text) {
+    return new Promise((resolve) => {
+        if (!window.speechSynthesis) { resolve(); return; }
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = 'ms-MY';
+        utt.rate = 1;
+        utt.onend = resolve;
+        utt.onerror = resolve;
+        window.speechSynthesis.speak(utt);
     });
 }
 
@@ -459,6 +480,8 @@ async function processMessage(text) {
 
         addMessage('ai', data.text);
 
+        const ttsNames = data.tts_names || [];
+
         // Handle disambiguation — show clickable buttons
         if (data.action === 'disambiguate' && data.disambiguate) {
             // Add any clear (non-ambiguous) items that were included
@@ -469,7 +492,7 @@ async function processMessage(text) {
             showDisambiguationButtons(data.disambiguate);
             // Play audio only for clear items (no audio for disambiguation)
             if (data.has_audio && data.audio_matches && data.audio_matches.length) {
-                await playAudioSequence(data.audio_matches);
+                await playAudioSequence(data.audio_matches, ttsNames);
             } else {
                 resumeMic();
             }
@@ -496,8 +519,12 @@ async function processMessage(text) {
         }
 
         // Play audio response (item names + "Ada lagi?" only)
+        // Pass ttsNames for browser TTS fallback on items without pre-recorded audio
         if (data.has_audio && data.audio_matches && data.audio_matches.length) {
-            await playAudioSequence(data.audio_matches);
+            await playAudioSequence(data.audio_matches, ttsNames);
+        } else if (ttsNames.length > 0) {
+            // Only TTS items, no pre-recorded audio
+            await playAudioSequence([], ttsNames);
         } else {
             resumeMic();
         }
