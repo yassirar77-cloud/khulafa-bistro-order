@@ -809,11 +809,18 @@ async def voice_chat(request: Request):
 
             deepseek_prompt = f"""You are a food order extraction AI for Khulafa Bistro, a Malaysian mamak restaurant.
 
-Extract the food/drink order from this customer transcript and match each item to the nearest item from the Khulafa menu below.
+Extract ONLY the food/drink items the customer EXPLICITLY ordered from this transcript.
 The transcript comes from speech recognition and may contain misspellings, Malay slang, or mishearings.
 
+STRICT RULES:
+- Only extract items the customer explicitly mentioned. Do NOT infer, suggest, or add related items.
+- If the customer says "naan cheese dan butter", that is 2 separate items: "naan cheese" and "naan butter" — each quantity 1.
+- If quantity is ambiguous or unclear, ALWAYS default to 1.
+- A number between two food words is likely a speech recognition error, NOT a quantity. Example: "naan cheese 9 butter" = "naan cheese" x1 + "naan butter" x1 (the "9" is noise).
+- Only treat a number as quantity when it clearly precedes or follows a SINGLE item, e.g. "roti canai dua" = roti canai x2, "3 teh tarik" = teh tarik x3.
+
 SPEECH CORRECTION HINTS:
-- "non"/"nun"/"nan"/"none" = "naan"
+- "non"/"nun"/"nan"/"none"/"nanan" = "naan"
 - "batu"/"batter" = "butter"
 - "galic"/"gali" = "garlic"
 - "mi"/"mie" = "mee"
@@ -835,6 +842,7 @@ Return ONLY a JSON array of matched items. Each element:
 
 If multiple items are ordered, return multiple elements.
 If unclear but you can guess, make your best guess - do NOT return empty.
+Default quantity to 1 when unsure.
 Example: [{{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95}}]
 
 Transcript: {speech}"""
@@ -889,20 +897,18 @@ Be warm and friendly. Keep responses SHORT - max 1-2 sentences.
 The customer said: "{speech}"
 Our order extraction system detected these items: {items_summary}
 
-MENU ITEMS AVAILABLE:
-{chr(10).join([f"- {name}" for name in MENU.keys()])}
-
-TASK:
-- Verify the extracted items exist in the menu (match to exact menu names)
-- Respond naturally as Aisha confirming the items
-- Ask "Ada lagi?" after confirming items
+STRICT RULES:
+- ONLY confirm the exact items listed above. Do NOT add, suggest, or recommend any other items.
+- NEVER add items the customer did not explicitly order.
+- Just confirm what was detected, then ask "Ada lagi?"
 - If an extracted item does not match the menu, say "Maaf, [item] takde dalam menu"
+- Do NOT say things like "you might also like..." or suggest related items
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
 {{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "your response"}}
 
 IMPORTANT:
-- "items" array = lowercase exact menu item names
+- "items" array MUST contain ONLY the items from the detected list above — nothing extra
 - "quantities" array = quantity for each item (same order as items array)
 - "action" must be "add"
 - Always respond with valid JSON only"""
@@ -921,8 +927,10 @@ Handle this naturally:
 - Greetings: respond warmly ("Hai! Nak order apa hari ni?")
 - Confirmations (tu je/cukup/dah/hantar/confirm/settle/setel/sekian): confirm the order with "Terima kasih! Pesanan sudah dihantar."
 - Cancel/remove: acknowledge the cancellation
-- Questions: answer helpfully
+- Questions: answer helpfully but NEVER suggest specific menu items
 - If it seems like they're ordering food, try to match to menu items
+
+STRICT: NEVER suggest, recommend, or add menu items the customer did not mention. Only confirm what the customer says.
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
 
