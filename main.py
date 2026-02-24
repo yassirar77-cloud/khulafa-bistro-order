@@ -62,7 +62,8 @@ RULES:
 4. NEVER recommend anything unless the customer explicitly asks (e.g. "apa yang sedap?", "recommend apa?")
 5. When the customer confirms the order ("tu je" / "cukup" / "dah" / "hantar" / "confirm" / "settle" / "setel" / "sekian"), reply with ONLY: CONFIRM_ORDER
 6. Keep every response under 15 words
-7. Understand common Malay speech patterns, slang, and misspellings (e.g. "minggu ring" = "mi goreng", "teh o aih" = "teh o ais", "rotikan ai" = "roti canai")
+7. Understand common Malay speech patterns, slang, and misspellings (e.g. "minggu ring" = "mi goreng", "teh o aih" = "teh o ais", "rotikan ai" = "roti canai", "main goreng" = "maggi goreng" or "mee goreng", "maggie goreng" = "maggi goreng")
+8. CRITICAL: All mee goreng, maggi goreng, bihun, kuey teow, and indomee items ARE on the menu. NEVER say they are unavailable.
 
 MENU ITEMS:
 {_build_menu_list()}
@@ -823,7 +824,22 @@ SPEECH CORRECTION HINTS:
 - "roti canal"/"roti cana" = "roti canai"
 - "teh tariq" = "teh tarik"
 - "nasi lemak" = "nasi lemak bungkus"
-- "mi goreng" = "mee goreng"
+- "mi goreng"/"mie goreng"/"minggu ring" = "mee goreng"
+- "main goreng" = could be "maggi goreng" or "mee goreng" (use context to decide)
+- "maggie"/"megi"/"meggi" = "maggi"
+- "maggie goreng"/"megi goreng" = "maggi goreng"
+- "bee hun"/"bi hun"/"mihun" = "bihun"
+- "kuay teow"/"koay teow"/"char kuey teow"/"kuey tiau" = "kuey teow goreng"
+- "indo mee"/"indo mi" = "indomee"
+
+NOODLE ITEMS ON MENU (these are ALL valid - never say they are unavailable):
+- maggi goreng, maggi goreng mamak, maggi goreng ayam, maggi goreng daging, maggi goreng kambing
+- maggi tomyam, maggi sup
+- mee goreng, mee goreng mamak, mee goreng ayam, mee goreng daging, mee goreng seafood
+- mee rebus, mee sup, mee campur bihun
+- bihun goreng, bihun goreng mamak, bihun sup
+- kuey teow goreng, kuey teow goreng mamak, kuey teow tomyam
+- indomee goreng, indomee double, indomee kosong
 
 MALAY NUMBER WORDS: satu=1, dua=2, tiga=3, empat=4, lima=5, enam=6, tujuh=7, lapan=8, sembilan=9, sepuluh=10
 
@@ -893,10 +909,11 @@ MENU ITEMS AVAILABLE:
 {chr(10).join([f"- {name}" for name in MENU.keys()])}
 
 TASK:
-- Verify the extracted items exist in the menu (match to exact menu names)
+- Match the extracted items to the closest menu item names
 - Respond naturally as Aisha confirming the items
 - Ask "Ada lagi?" after confirming items
-- If an extracted item does not match the menu, say "Maaf, [item] takde dalam menu"
+- IMPORTANT: If the item exists in the menu list above, NEVER say it is unavailable
+- Only say "Maaf, [item] takde dalam menu" if the item truly does NOT exist in the menu at all
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
 {{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "your response"}}
@@ -982,7 +999,8 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         qty = quantities[idx] if idx < len(quantities) else 1
         if item_lower in MENU:
             menu_item = MENU[item_lower]
-            audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
+            if menu_item['audio_id']:
+                audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
             new_items.append({"name": item_name.title(), "qty": qty, "price": menu_item["price"]})
 
     # Add "ada lagi?" audio for add action

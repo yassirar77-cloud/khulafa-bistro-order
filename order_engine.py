@@ -97,6 +97,41 @@ MENU = {
     "nasi goreng seafood":      ("0215", 11.00),
     "nasi goreng ayam":         ("0227", 9.00),
 
+    # === MEE & MAGGI ===
+    "maggi goreng telur mata":  ("", 7.50),
+    "maggi goreng kambing":     ("", 13.00),
+    "maggi goreng daging":      ("", 9.50),
+    "maggi goreng ayam":        ("", 9.50),
+    "maggi goreng mamak":       ("", 6.00),
+    "maggi goreng basa":        ("", 7.00),
+    "maggi goreng":             ("", 6.00),
+    "maggi tomyam":             ("", 7.00),
+    "maggi sup":                ("", 6.00),
+    "mee goreng telur mata":    ("", 7.50),
+    "mee goreng seafood":       ("", 9.50),
+    "mee goreng daging":        ("", 9.50),
+    "mee goreng mamak":         ("", 6.00),
+    "mee goreng ayam":          ("", 9.50),
+    "mee goreng":               ("", 6.00),
+    "mee campur bihun":         ("", 6.00),
+    "mee rebus":                ("", 6.00),
+    "mee sup":                  ("", 6.00),
+
+    # === BIHUN & KUEY TEOW ===
+    "bihun goreng telur mata":  ("", 7.50),
+    "bihun goreng mamak":       ("", 6.00),
+    "bihun goreng":             ("", 6.00),
+    "bihun sup":                ("", 6.00),
+    "kuey teow goreng mamak":   ("", 6.00),
+    "kuey teow goreng basa":    ("", 7.00),
+    "kuey teow goreng":         ("", 6.00),
+    "kuey teow tomyam":         ("", 7.00),
+
+    # === INDOMEE ===
+    "indomee goreng":           ("", 5.50),
+    "indomee double":           ("", 8.50),
+    "indomee kosong":           ("", 4.50),
+
     # === LAUK ===
     "kambing mysur":            ("0243", 15.00),
     "ayam goreng":              ("0247", 6.00),
@@ -349,7 +384,8 @@ class OrderEngine:
         for name, qty, audio_id, price in clear_items:
             item = {"name": name.title(), "qty": qty, "price": price}
             clear_new.append(item)
-            clear_audio.append(audio_id)
+            if audio_id:
+                clear_audio.append(audio_id)
             display = name.title()
             if qty > 1:
                 display = f"{qty} {display}"
@@ -396,7 +432,8 @@ class OrderEngine:
                 "qty": qty,
                 "price": price,
             })
-            audio_ids.append(audio_id)
+            if audio_id:
+                audio_ids.append(audio_id)
             display = name.title()
             if qty > 1:
                 display = f"{qty} {display}"
