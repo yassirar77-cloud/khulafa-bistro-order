@@ -756,7 +756,7 @@ async def voice_chat(request: Request):
     menu_list = ", ".join(menu_names)
 
     qwen_client = get_qwen_client()
-    model = os.getenv("QWEN_MODEL", "qwen-plus")
+    model = os.getenv("QWEN_MODEL", "qwen-max")
 
     system_prompt = f"""You extract food orders. Reply ONLY in JSON.
 
