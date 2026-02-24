@@ -190,22 +190,22 @@ class OrderEngine:
         hour = datetime.now().hour
         if 5 <= hour < 12:
             return {
-                "text": "Selamat pagi! Saya Aisha. Nak order apa hari ini?",
+                "text": "Selamat pagi! Saya Aisha, boleh saya ambil pesanan anda?",
                 "audio_ids": ["0005"],
             }
         elif 12 <= hour < 15:
             return {
-                "text": "Selamat tengahari! Saya Aisha. Nak makan apa?",
+                "text": "Selamat tengah hari! Saya Aisha, nak pesan apa hari ini?",
                 "audio_ids": ["0006"],
             }
         elif 15 <= hour < 19:
             return {
-                "text": "Selamat petang! Saya Aisha. Jemput order.",
+                "text": "Selamat petang! Saya Aisha, boleh saya ambil pesanan anda?",
                 "audio_ids": ["0007"],
             }
         else:
             return {
-                "text": "Selamat malam! Saya Aisha. Selamat datang.",
+                "text": "Selamat malam! Saya Aisha, selamat datang ke Khulafa Bistro.",
                 "audio_ids": ["0008"],
             }
 

@@ -129,11 +129,11 @@ class AishaVoice:
     def get_greeting(self, time_of_day: str = "default") -> dict | None:
         """Get a greeting audio based on time of day."""
         greeting_map = {
-            "morning": ["Selamat pagi, nak order apa hari ini?", "Good morning, welcome!"],
-            "afternoon": ["Selamat tengahari, nak makan apa?", "Good afternoon, ready to order?"],
-            "evening": ["Selamat petang, jemput order.", "Good evening, what can I get for you?"],
-            "night": ["Selamat malam, selamat datang."],
-            "default": ["Hai, saya Aisha. Boleh saya ambil pesanan anda?", "Welcome! Nak order apa?"]
+            "morning": ["Selamat pagi! Saya Aisha, boleh saya ambil pesanan anda?", "Selamat pagi, selamat datang ke Khulafa Bistro!"],
+            "afternoon": ["Selamat tengah hari! Saya Aisha, nak pesan apa hari ini?", "Selamat tengah hari, selamat datang ke Khulafa Bistro!"],
+            "evening": ["Selamat petang! Saya Aisha, boleh saya ambil pesanan anda?", "Selamat petang, selamat datang ke Khulafa Bistro!"],
+            "night": ["Selamat malam! Saya Aisha, selamat datang ke Khulafa Bistro.", "Selamat malam, boleh saya ambil pesanan anda?"],
+            "default": ["Selamat datang ke Khulafa Bistro! Saya Aisha, boleh saya ambil pesanan anda?", "Hai, saya Aisha. Boleh saya ambil pesanan anda?"]
         }
         
         candidates = greeting_map.get(time_of_day, greeting_map["default"])
@@ -268,7 +268,7 @@ def create_voice_routes(app, aisha: AishaVoice):
                 "time_of_day": time_of_day
             }
         return {
-            "text": "Hai, saya Aisha. Boleh saya ambil pesanan anda?",
+            "text": "Selamat datang ke Khulafa Bistro! Saya Aisha, boleh saya ambil pesanan anda?",
             "audio_matches": [],
             "has_audio": False,
             "time_of_day": time_of_day
