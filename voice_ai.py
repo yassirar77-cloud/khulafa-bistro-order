@@ -140,7 +140,7 @@ async def chat_with_voice(
     
     # Call Qwen3 API
     try:
-        model = os.getenv("QWEN_MODEL", "qwen3-plus")
+        model = os.getenv("QWEN_MODEL", "qwen-plus")
         api_messages = [{"role": "system", "content": build_system_prompt(table_number, menu_context)}]
         api_messages.extend(messages)
 
