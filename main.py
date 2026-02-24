@@ -764,14 +764,38 @@ Always try to match customer speech to the nearest menu item BEFORE asking them 
 Only ask "Maaf, boleh ulang?" if truly cannot match anything.
 
 SPEECH RECOGNITION CORRECTIONS (common mishearing):
+Word-level corrections - apply these FIRST before matching to menu:
+- "non" / "nun" / "nan" / "none" = "naan"
+- "batu" / "batter" / "bata" = "butter"
+- "galic" / "gali" / "gallic" / "golic" = "garlic"
+- "mi" / "mie" = "mee"
+- "aming" / "amin" / "ayang" = "ayam"
+- "mosarella" / "mozarela" / "mozzarella" = "mozzerella"
+- "chapati" / "capathi" / "cepati" = "chappathi"
+- "kuih" / "kuey" / "kwey" = "kuey"
+
+Full phrase corrections:
 - "nancy" / "nacy" / "nan si" = "naan cheese"
 - "non cheese" / "nun cheese" = "naan cheese"
-- "naan biasa" / "nan biasa" = "naan biasa"
+- "non batu galic" / "non batu garlic" / "naan batu garlic" = "naan butter garlic"
+- "batu garlic" / "batu galic" = "butter garlic" (use with naan: "naan butter garlic")
+- "non batu" / "nan batu" / "naan batu" = "naan butter"
+- "naan biasa" / "nan biasa" / "non biasa" = "naan biasa"
 - "roti canal" / "roti cana" = "roti canai"
 - "briyani" / "biriyani" / "biryani" = "briyani"
 - "milo" / "mylo" = "milo"
 - "teh tarik" / "teh tariq" = "teh tarik"
 - "nasi lemak" = "nasi lemak bungkus"
+- "mi goreng" / "mie goreng" = "mee goreng" (then match to specific mee goreng variant)
+- "mi rebus" / "mie rebus" = "mee rebus"
+- "mi sup" / "mie sup" = "mee sup"
+
+CRITICAL MATCHING RULES:
+- Always apply word-level corrections FIRST, then combine words to find the menu item
+- "batu" almost always means "butter" in speech recognition - NEVER ignore it
+- If customer says 2 words that each match a modifier (e.g. "batu garlic" = "butter garlic"), include BOTH in the match
+- Do NOT drop words from customer speech - every word matters for matching the correct item
+- If an item does not exist in the menu after corrections, say "Maaf, [item] takde dalam menu. Boleh check menu?" - do NOT suggest random items
 
 FULL MENU:
 
@@ -866,7 +890,7 @@ IMPORTANT:
 
     response = qwen_client.chat.completions.create(
         model=model,
-        max_tokens=80,
+        max_tokens=150,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": speech}
