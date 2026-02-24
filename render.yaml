@@ -11,7 +11,11 @@ services:
         value: 3.12.0
       - key: TELEGRAM_BOT_TOKEN
         sync: false
-      - key: CLAUDE_API_KEY
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: QWEN_API_URL
+        sync: false
+      - key: QWEN_MODEL
         sync: false
       - key: CASHIER_CHAT_ID
         sync: false

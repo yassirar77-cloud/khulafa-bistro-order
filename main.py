@@ -17,20 +17,21 @@ from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
-import anthropic
+from openai import OpenAI
 
-# ========== Claude API Setup ==========
-_claude_client = None
+# ========== Qwen3 API Setup ==========
+_qwen_client = None
 
-def get_claude_client():
-    """Lazy-init Anthropic client."""
-    global _claude_client
-    if _claude_client is None:
-        api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
+def get_qwen_client():
+    """Lazy-init Qwen3 client (OpenAI-compatible)."""
+    global _qwen_client
+    if _qwen_client is None:
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        base_url = os.getenv("QWEN_API_URL")
+        if not api_key or not base_url:
             return None
-        _claude_client = anthropic.Anthropic(api_key=api_key)
-    return _claude_client
+        _qwen_client = OpenAI(api_key=api_key, base_url=base_url)
+    return _qwen_client
 
 def _build_menu_list() -> str:
     """Build a flat menu list string from the MENU dict for the system prompt."""
@@ -739,7 +740,6 @@ async def serve_voice_page(table_number: str):
 
 @app.post("/api/voice/chat")
 async def voice_chat(request: Request):
-    import anthropic
     import json as json_lib
 
     body = await request.json()
@@ -755,12 +755,10 @@ async def voice_chat(request: Request):
 
     menu_list = ", ".join(menu_names)
 
-    client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY"))
+    qwen_client = get_qwen_client()
+    model = os.getenv("QWEN_MODEL", "qwen3-plus")
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=80,
-        system=f"""You extract food orders. Reply ONLY in JSON.
+    system_prompt = f"""You extract food orders. Reply ONLY in JSON.
 
 MENU: {menu_list}
 
@@ -779,12 +777,20 @@ If customer says tu je/cukup/dah/hantar/confirm/settle:
 If unclear:
 {{"items":[],"action":"unclear","reply":"Maaf, boleh ulang?"}}
 
-JSON only. No other text.""",
-        messages=[{"role": "user", "content": speech}]
+JSON only. No other text."""
+
+    response = qwen_client.chat.completions.create(
+        model=model,
+        max_tokens=80,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": speech}
+        ],
+        extra_body={"enable_thinking": False}
     )
 
     # Parse response
-    raw = response.content[0].text.strip()
+    raw = response.choices[0].message.content.strip()
     try:
         data = json_lib.loads(raw)
     except:

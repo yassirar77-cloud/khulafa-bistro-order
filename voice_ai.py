@@ -1,29 +1,32 @@
 """
-Voice AI Module - Claude API + Pre-recorded Audio
+Voice AI Module - Qwen3 API + Pre-recorded Audio
 ===================================================
 1. Customer speaks → text via Web Speech API
-2. Text sent to Claude API for conversational response
-3. Claude's response matched to pre-recorded audio
+2. Text sent to Qwen3 API for conversational response
+3. Qwen3's response matched to pre-recorded audio
 4. Audio played back to customer (natural Malay voice)
 5. Falls back to browser TTS if no audio match
 """
 
 import os
-import anthropic
+from openai import OpenAI
 from datetime import datetime
 from aisha_voice import get_aisha
 
 
-# Initialize Claude client
+# Initialize Qwen3 client (OpenAI-compatible)
 client = None
 
 def get_client():
     global client
     if client is None:
-        api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        base_url = os.getenv("QWEN_API_URL")
         if not api_key:
-            raise ValueError("CLAUDE_API_KEY or ANTHROPIC_API_KEY not set")
-        client = anthropic.Anthropic(api_key=api_key)
+            raise ValueError("DASHSCOPE_API_KEY not set")
+        if not base_url:
+            raise ValueError("QWEN_API_URL not set")
+        client = OpenAI(api_key=api_key, base_url=base_url)
     return client
 
 
@@ -41,7 +44,7 @@ def get_time_of_day() -> str:
 
 
 def build_system_prompt(table_number: str, menu_context: str) -> str:
-    """Build the system prompt for Claude with audio-matching instructions."""
+    """Build the system prompt for Qwen3 with audio-matching instructions."""
     
     return f"""Kau adalah Aisha, pelayan virtual di restoran ini, Table {table_number}.
 
@@ -135,19 +138,23 @@ async def chat_with_voice(
         })
     messages.append({"role": "user", "content": message})
     
-    # Call Claude API
+    # Call Qwen3 API
     try:
-        response = get_client().messages.create(
-            model="claude-sonnet-4-20250514",
+        model = os.getenv("QWEN_MODEL", "qwen3-plus")
+        api_messages = [{"role": "system", "content": build_system_prompt(table_number, menu_context)}]
+        api_messages.extend(messages)
+
+        response = get_client().chat.completions.create(
+            model=model,
             max_tokens=150,  # Keep responses short
-            system=build_system_prompt(table_number, menu_context),
-            messages=messages
+            messages=api_messages,
+            extra_body={"enable_thinking": False}
         )
-        
-        response_text = response.content[0].text.strip()
-        
+
+        response_text = response.choices[0].message.content.strip()
+
     except Exception as e:
-        print(f"[VoiceAI] Claude API error: {e}")
+        print(f"[VoiceAI] Qwen3 API error: {e}")
         response_text = "Maaf, saya tak dapat dengar. Boleh ulang?"
     
     # Find matching audio for the response
