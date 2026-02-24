@@ -33,6 +33,19 @@ def get_qwen_client():
         _qwen_client = OpenAI(api_key=api_key, base_url=base_url)
     return _qwen_client
 
+# ========== DeepSeek API Setup (Intent Extraction) ==========
+_deepseek_client = None
+
+def get_deepseek_client():
+    """Lazy-init DeepSeek client (OpenAI-compatible)."""
+    global _deepseek_client
+    if _deepseek_client is None:
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            return None
+        _deepseek_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+    return _deepseek_client
+
 def _build_menu_list() -> str:
     """Build a flat menu list string from the MENU dict for the system prompt."""
     lines = []
@@ -740,194 +753,239 @@ async def serve_voice_page(table_number: str):
 
 @app.post("/api/voice/chat")
 async def voice_chat(request: Request):
+    """
+    Dual AI Pipeline:
+    STEP 1 - DeepSeek: Intent extraction & fuzzy menu matching from raw speech
+    STEP 2 - Qwen Max: Natural Aisha conversation response
+
+    Non-ordering messages (greetings, confirmations, cancel) skip DeepSeek
+    and go straight to Qwen Max.
+    """
     import json as json_lib
+    import re
 
     body = await request.json()
     speech = body.get("message", "")
     current_order = body.get("order", [])
     table = body.get("table_number", "T01")
 
-    # Get menu items list
-    menu_names = list(MENU.keys()) if 'MENU' in dir() else []
-    if not menu_names:
-        from order_engine import MENU
-        menu_names = list(MENU.keys())
-
-    menu_list = ", ".join(menu_names)
+    from order_engine import MENU, AUDIO_RESPONSES
 
     qwen_client = get_qwen_client()
     model = os.getenv("QWEN_MODEL", "qwen-max")
 
-    system_prompt = """You are Aisha, AI waitress for Khulafa Bistro.
-Language: Bahasa Melayu + English mix (Malaysian style).
-Always try to match customer speech to the nearest menu item BEFORE asking them to repeat.
-Only ask "Maaf, boleh ulang?" if truly cannot match anything.
+    # ── Detect if this is an ordering message or a non-ordering message ──
+    # Non-ordering: greetings, confirmations, cancellations, questions, etc.
+    speech_lower = speech.lower().strip()
 
-SPEECH RECOGNITION CORRECTIONS (common mishearing):
-Word-level corrections - apply these FIRST before matching to menu:
-- "non" / "nun" / "nan" / "none" = "naan"
-- "batu" / "batter" / "bata" = "butter"
-- "galic" / "gali" / "gallic" / "golic" = "garlic"
-- "mi" / "mie" = "mee"
-- "aming" / "amin" / "ayang" = "ayam"
-- "mosarella" / "mozarela" / "mozzarella" = "mozzerella"
-- "chapati" / "capathi" / "cepati" = "chappathi"
-- "kuih" / "kuey" / "kwey" = "kuey"
+    NON_ORDER_PATTERNS = [
+        # Confirmations / end-of-order
+        r"\b(tu\s*je|tu\s*jer|itu\s*je|cukup|dah|sekian|confirm|settle|setel|hantar)\b",
+        # Cancel / remove
+        r"\b(cancel|batal|tak\s*jadi|tak\s*nak|remove|buang|padam)\b",
+        # Greetings
+        r"\b(hi|hello|helo|hey|assalamualaikum|salam|selamat)\b",
+        # Questions about menu / recommendations
+        r"\b(apa\s+yang|recommend|cadang|menu|senarai)\b",
+        # Yes/No responses
+        r"^(ya|yes|ok|okay|tidak|tak|no)\s*$",
+        # Thank you
+        r"\b(terima\s*kasih|thank|thanks|tq)\b",
+    ]
 
-Full phrase corrections:
-- "nancy" / "nacy" / "nan si" = "naan cheese"
-- "non cheese" / "nun cheese" = "naan cheese"
-- "non batu galic" / "non batu garlic" / "naan batu garlic" = "naan butter garlic"
-- "batu garlic" / "batu galic" = "butter garlic" (use with naan: "naan butter garlic")
-- "non batu" / "nan batu" / "naan batu" = "naan butter"
-- "naan biasa" / "nan biasa" / "non biasa" = "naan biasa"
-- "roti canal" / "roti cana" = "roti canai"
-- "briyani" / "biriyani" / "biryani" = "briyani"
-- "milo" / "mylo" = "milo"
-- "teh tarik" / "teh tariq" = "teh tarik"
+    is_ordering = True
+    for pattern in NON_ORDER_PATTERNS:
+        if re.search(pattern, speech_lower):
+            is_ordering = False
+            break
+
+    # ── STEP 1: DeepSeek Intent Extraction (only for ordering messages) ──
+    deepseek_result = None
+
+    if is_ordering:
+        deepseek_client = get_deepseek_client()
+        if deepseek_client:
+            menu_list_str = "\n".join([f"- {name}" for name in MENU.keys()])
+
+            deepseek_prompt = f"""You are a food order extraction AI for Khulafa Bistro, a Malaysian mamak restaurant.
+
+Extract the food/drink order from this customer transcript and match each item to the nearest item from the Khulafa menu below.
+The transcript comes from speech recognition and may contain misspellings, Malay slang, or mishearings.
+
+SPEECH CORRECTION HINTS:
+- "non"/"nun"/"nan"/"none" = "naan"
+- "batu"/"batter" = "butter"
+- "galic"/"gali" = "garlic"
+- "mi"/"mie" = "mee"
+- "aming"/"ayang" = "ayam"
+- "nancy"/"nan si" = "naan cheese"
+- "non batu galic" = "naan butter garlic"
+- "roti canal"/"roti cana" = "roti canai"
+- "teh tariq" = "teh tarik"
 - "nasi lemak" = "nasi lemak bungkus"
-- "mi goreng" / "mie goreng" = "mee goreng" (then match to specific mee goreng variant)
-- "mi rebus" / "mie rebus" = "mee rebus"
-- "mi sup" / "mie sup" = "mee sup"
+- "mi goreng" = "mee goreng"
 
-CRITICAL MATCHING RULES:
-- Always apply word-level corrections FIRST, then combine words to find the menu item
-- "batu" almost always means "butter" in speech recognition - NEVER ignore it
-- If customer says 2 words that each match a modifier (e.g. "batu garlic" = "butter garlic"), include BOTH in the match
-- Do NOT drop words from customer speech - every word matters for matching the correct item
-- If an item does not exist in the menu after corrections, say "Maaf, [item] takde dalam menu. Boleh check menu?" - do NOT suggest random items
+MALAY NUMBER WORDS: satu=1, dua=2, tiga=3, empat=4, lima=5, enam=6, tujuh=7, lapan=8, sembilan=9, sepuluh=10
 
-FULL MENU:
+MENU:
+{menu_list_str}
 
-ROTI: roti canai, roti telur, roti telur bawang, roti telur bawang cili,
-roti telur cheese, roti sardin, roti sardin cheese, roti khawin, roti boom,
-roti boom kaya, roti tissue, roti pisang, roti pisang cheese, roti pisang telur,
-roti planta, roti planta telur, roti sarang burung, roti cheese, roti bawang,
-roti bawang cili, roti jantan, roti jantan bawang, roti jantan cheese,
-roti tambal, roti special, roti special double, roti canai susu, roti milo,
-roti kaya, roti bakar, roti bakar kaya, roti bakar telur, roti bakar cheese,
-roti bakar telur cheese, murtabak ayam, murtabak daging, murtabak kambing,
-capati biasa, capati telur, capati ghee, capati kua sardin
+Return ONLY a JSON array of matched items. Each element:
+{{"matched_item": "exact menu item name", "quantity": number, "confidence": float 0-1}}
 
-NAAN: naan biasa, naan mozzerella cheese, naan cheese, naan garlic,
-naan cheese garlic, naan cheese mozzerella garlic, naan butter, naan butter garlic,
-naan cheese butter, naan cheese double, naan mozzerella double, naan Mumtaj, naan Tajmahal,
-chappathi biasa, chappathi kua sardin, chappathi telur, chappathi cheese,
-chappathi tampal, chappathi ghee, idli, appam, appam telur, poori set,
-puttu mayam, vadai, samosa
+If multiple items are ordered, return multiple elements.
+If unclear but you can guess, make your best guess - do NOT return empty.
+Example: [{{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95}}]
 
-NASI: nasi ayam, nasi ayam bawang, nasi ayam bawang sayur, nasi ayam sayur,
-nasi ayam rendang, nasi ayam rendang sayur, nasi putih, nasi putih ayam rempah,
-nasi daging, nasi ikan, nasi sayur, nasi telur sayur, nasi sotong, nasi bujang,
-nasi lemak bungkus, briyani ayam bawang set, briyani ayam goreng set, briyani ayam,
-briyani kambing set, briyani kambing, briyani daging set, briyani daging,
-briyani ikan set, briyani telur, briyani sayur, briyani kosong, briyani lamb shank
+Transcript: {speech}"""
 
-NASI GORENG: nasi goreng kampung, nasi goreng biasa, nasi goreng mamak,
-nasi goreng pattaya, nasi goreng cina, nasi goreng daging, nasi goreng telur mata,
-nasi goreng cili padi, nasi goreng ikan masin, nasi goreng paprik ayam,
-nasi goreng paprik daging, nasi goreng seafood, nasi goreng tomyam, nasi goreng thai,
-nasi goreng USA ayam, nasi goreng USA daging, nasi goreng USA seafood,
-nasi goreng sardin, nasi goreng udang, nasi goreng veg, nasi goreng ayam,
-nasi goreng sotong, nasi goreng sweet and sour, nasi goreng tomyam seafood
+            try:
+                ds_response = deepseek_client.chat.completions.create(
+                    model="deepseek-chat",
+                    max_tokens=300,
+                    messages=[
+                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. Return ONLY valid JSON arrays, nothing else."},
+                        {"role": "user", "content": deepseek_prompt}
+                    ]
+                )
 
-KAMBING: kambing mysur, kambing dengan nasi putih, kambing dengan nasi dan sayur
+                ds_raw = ds_response.choices[0].message.content.strip()
+                # Parse DeepSeek JSON response
+                try:
+                    deepseek_result = json_lib.loads(ds_raw)
+                except json_lib.JSONDecodeError:
+                    # Try extracting JSON array from response
+                    arr_match = re.search(r'\[.*\]', ds_raw, re.DOTALL)
+                    if arr_match:
+                        deepseek_result = json_lib.loads(arr_match.group())
 
-LAUK: ayam goreng, ayam bawang, ayam tandoori, ayam rempah, ayam rendang,
-ayam masak madu, ayam goreng kunyit, daging rendang, daging masak merah,
-ikan goreng, ikan kari, sotong goreng, telur dadar, telur goreng,
-sayur campur, dhal, kari ayam, kari kambing, kari ikan
+                # Normalize to list
+                if isinstance(deepseek_result, dict):
+                    deepseek_result = [deepseek_result]
 
-MAGGI/MEE: maggi goreng, maggi goreng mamak, maggi goreng ayam, maggi goreng daging,
-maggi tomyam, mee goreng mamak, mee goreng ayam, mee goreng daging,
-mee goreng seafood, mee rebus, mee sup, bihun goreng, bihun sup,
-kuey teow goreng, kuey teow tomyam
+                print(f"[DeepSeek] Extracted: {deepseek_result}")
+            except Exception as e:
+                print(f"[DeepSeek] Error: {e} - falling back to Qwen-only")
+                deepseek_result = None
 
-MINUMAN TEH/KOPI: teh tarik, teh tarik ais, teh o, teh o ais, teh o limau,
-teh o limau ais, teh ais, teh panas, teh halia, teh halia ais,
-kopi tarik, kopi o, kopi o ais, kopi ais, kopi panas, kopi halia,
-nescafe tarik, nescafe ais, milo tarik, milo ais, milo panas, milo dinosaur,
-susu tarik, susu ais, cham tarik, cham ais, three layer tea,
-tongkat ali, halia panas, halia ais, cincau ais, cincau panas
+    # ── STEP 2: Qwen Max Conversation Response ──
+    if deepseek_result and is_ordering:
+        # Build a structured prompt for Qwen using DeepSeek's extraction
+        extracted_items = []
+        for item in deepseek_result:
+            name = item.get("matched_item", "")
+            qty = item.get("quantity", 1)
+            confidence = item.get("confidence", 0)
+            if name:
+                qty_str = f" x{qty}" if qty > 1 else ""
+                extracted_items.append(f"{name}{qty_str} (confidence: {confidence})")
 
-SIRAP: sirap ais, sirap panas, sirap bandung ais, sirap limau ais,
-sirap lychee ais, sirap bandung lychee ais, sirap bandung cincau ais,
-sirap ais jumbo, sirap bandung ais jumbo
+        items_summary = ", ".join(extracted_items) if extracted_items else "unclear"
 
-BARLI: barli panas, barli ais, barli lemon ais, barli limau ais,
-barli susu ais, barli susu panas, barli ais jumbo
+        qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
+Language: Bahasa Melayu + English mix (Malaysian style).
+Be warm and friendly. Keep responses SHORT - max 1-2 sentences.
 
-JUICE: tembikai juice, watermelon lychee, tembikai susu, orange juice,
-apple juice, apple asam ais, apple carrot, apple susu, carrot juice,
-carrot susu, carrot orange, pineapple juice, lemon ais, limau ais,
-limau asam ais, honey lemon, lychee ais, kelapa muda
+The customer said: "{speech}"
+Our order extraction system detected these items: {items_summary}
 
-LAIN-LAIN: mineral water big, mineral water small, ais kosong, air suam,
-air panas, coke tin, pepsi tin, sprite tin, seven up tin, milo kotak,
-extra joss, jumbo extra joss, ice cream, kulfi cup, kulfi stick, bobo boy
+MENU ITEMS AVAILABLE:
+{chr(10).join([f"- {name}" for name in MENU.keys()])}
 
-ORDER RULES:
-- Confirm each item before moving to next
-- Ask "Ada lagi?" after each item
-- When done, summarize full order and ask "Confirm pesanan?"
-- Keep responses SHORT - max 1-2 sentences
-- Be warm and friendly in Malaysian style
+TASK:
+- Verify the extracted items exist in the menu (match to exact menu names)
+- Respond naturally as Aisha confirming the items
+- Ask "Ada lagi?" after confirming items
+- If an extracted item does not match the menu, say "Maaf, [item] takde dalam menu"
 
-RESPONSE FORMAT - Always respond in this EXACT JSON format, nothing else:
-
-When customer orders items:
-{"items": ["roti canai", "maggi goreng"], "action": "add", "reply": "Roti Canai dan Maggi Goreng. Ada lagi?"}
-
-When customer confirms the order (tu je/cukup/dah/hantar/confirm/settle/setel/sekian):
-{"items": [], "action": "confirm", "reply": "Terima kasih! Pesanan sudah dihantar."}
-
-When you cannot understand:
-{"items": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}
+RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
+{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "your response"}}
 
 IMPORTANT:
-- Item names in the "items" array MUST be lowercase and match the menu item names exactly
-- Always respond with valid JSON only - no extra text before or after"""
+- "items" array = lowercase exact menu item names
+- "quantities" array = quantity for each item (same order as items array)
+- "action" must be "add"
+- Always respond with valid JSON only"""
+
+    else:
+        # Non-ordering: greetings, confirmations, cancel etc go straight to Qwen
+        qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
+Language: Bahasa Melayu + English mix (Malaysian style).
+Be warm and friendly. Keep responses SHORT - max 1-2 sentences.
+
+CURRENT ORDER: {json_lib.dumps(current_order) if current_order else "empty"}
+
+The customer said: "{speech}"
+
+Handle this naturally:
+- Greetings: respond warmly ("Hai! Nak order apa hari ni?")
+- Confirmations (tu je/cukup/dah/hantar/confirm/settle/setel/sekian): confirm the order with "Terima kasih! Pesanan sudah dihantar."
+- Cancel/remove: acknowledge the cancellation
+- Questions: answer helpfully
+- If it seems like they're ordering food, try to match to menu items
+
+RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
+
+When customer orders items:
+{{"items": ["roti canai"], "quantities": [1], "action": "add", "reply": "Roti Canai. Ada lagi?"}}
+
+When customer confirms order:
+{{"items": [], "quantities": [], "action": "confirm", "reply": "Terima kasih! Pesanan sudah dihantar."}}
+
+When customer cancels:
+{{"items": [], "quantities": [], "action": "cancel", "reply": "Okay, pesanan dibatalkan."}}
+
+When greeting or unclear:
+{{"items": [], "quantities": [], "action": "greeting", "reply": "your response"}}
+
+IMPORTANT: Always respond with valid JSON only - no extra text."""
 
     response = qwen_client.chat.completions.create(
         model=model,
-        max_tokens=150,
+        max_tokens=200,
         messages=[
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": qwen_prompt},
             {"role": "user", "content": speech}
         ],
         extra_body={"enable_thinking": False}
     )
 
-    # Parse response
+    # Parse Qwen response
     raw = response.choices[0].message.content.strip()
     try:
         data = json_lib.loads(raw)
-    except:
-        # Try to extract JSON from response
-        import re
+    except json_lib.JSONDecodeError:
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         if match:
-            data = json_lib.loads(match.group())
+            try:
+                data = json_lib.loads(match.group())
+            except json_lib.JSONDecodeError:
+                data = {"items": [], "quantities": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}
         else:
-            data = {"items": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}
+            data = {"items": [], "quantities": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}
 
     items = data.get("items", [])
+    quantities = data.get("quantities", [])
     action = data.get("action", "unclear")
     reply = data.get("reply", "")
 
-    # Look up audio for matched items
-    from order_engine import MENU, AUDIO_RESPONSES
+    # Pad quantities to match items length (default qty=1)
+    while len(quantities) < len(items):
+        quantities.append(1)
+
+    # Look up audio and build new_items with quantities
     audio_matches = []
     new_items = []
 
-    for item_name in items:
+    for idx, item_name in enumerate(items):
         item_lower = item_name.lower().strip()
+        qty = quantities[idx] if idx < len(quantities) else 1
         if item_lower in MENU:
             menu_item = MENU[item_lower]
             audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-            new_items.append({"name": item_name.title(), "qty": 1, "price": menu_item["price"]})
+            new_items.append({"name": item_name.title(), "qty": qty, "price": menu_item["price"]})
 
-    # Add "ada lagi?" audio only for add action
+    # Add "ada lagi?" audio for add action
     if action == "add" and new_items:
         audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
 
@@ -940,7 +998,7 @@ IMPORTANT:
     for ni in new_items:
         existing = next((i for i in updated_order if i["name"].lower() == ni["name"].lower()), None)
         if existing:
-            existing["qty"] += 1
+            existing["qty"] += ni["qty"]
         else:
             updated_order.append(ni)
 
@@ -953,7 +1011,8 @@ IMPORTANT:
         "action": action,
         "new_items": new_items,
         "order": updated_order,
-        "total": total
+        "total": total,
+        "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
     }
 
 @app.get("/api/voice/greeting")
