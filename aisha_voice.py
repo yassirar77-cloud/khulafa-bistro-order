@@ -1,11 +1,11 @@
 """
 Aisha Voice Audio Matching System
 ==================================
-Maps Claude AI text responses to pre-recorded ElevenLabs audio files.
+Maps AI text responses to pre-recorded ElevenLabs audio files.
 Zero API cost - just plays matching audio files.
 
 How it works:
-1. Claude generates a text response (e.g. "Roti canai satu.")
+1. Qwen3 generates a text response (e.g. "Roti canai satu.")
 2. This module finds the closest matching pre-recorded audio
 3. Returns the audio file path to play to the customer
 
@@ -62,7 +62,7 @@ class AishaVoice:
         Find the best matching audio for a given text query.
         
         Args:
-            query: The text to match (e.g., Claude's response)
+            query: The text to match (e.g., AI response)
             threshold: Minimum similarity score (0.0-1.0)
         
         Returns:

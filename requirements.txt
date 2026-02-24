@@ -8,4 +8,4 @@ requests
 httpx
 pillow
 sqlalchemy
-anthropic
+openai
