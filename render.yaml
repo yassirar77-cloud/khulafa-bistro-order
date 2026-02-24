@@ -13,6 +13,8 @@ services:
         sync: false
       - key: DASHSCOPE_API_KEY
         sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
       - key: QWEN_API_URL
         sync: false
       - key: QWEN_MODEL
