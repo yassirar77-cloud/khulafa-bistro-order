@@ -683,10 +683,7 @@ async function processMessage(text, alternatives) {
                 addTextSuggestion(data.text_suggestion);
             }
 
-            // Check for smart upsell (predefined pairs, not AI-generated)
-            if (data.extracted_items && data.extracted_items.length) {
-                checkUpsell(data.extracted_items);
-            }
+            // Upsell disabled — system prompt says "no unsolicited suggestions"
         }
 
         // Handle confirm_order — auto-submit order to Telegram
