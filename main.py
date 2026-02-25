@@ -809,29 +809,51 @@ async def voice_chat(request: Request):
         if deepseek_client:
             menu_list_str = "\n".join([f"- {name}" for name in MENU.keys()])
 
+            # Build enhanced message with all speech alternatives
+            if alternatives and len(alternatives) > 1:
+                alt_text = " | ".join([
+                    f'"{a["text"]}" ({a.get("confidence", 0):.0%})'
+                    if isinstance(a, dict) else f'"{a}"'
+                    for a in alternatives
+                ])
+                alt_section = f"\nSpeech recognition alternatives (use ALL to determine correct items):\n{alt_text}"
+            else:
+                alt_section = ""
+
             deepseek_prompt = f"""You are a food order extraction AI for Khulafa Bistro, a Malaysian mamak restaurant.
 
-Extract the food/drink order from this customer transcript and match each item to the nearest item from the Khulafa menu below.
-The transcript comes from speech recognition and may contain misspellings, Malay slang, or mishearings.
+IMPORTANT: Customer is ordering via voice. Speech recognition may mishear words.
+You will receive multiple speech alternatives — use ALL of them to determine the correct menu item.
+Always match to the closest menu item. If unsure, ask customer to repeat. Never guess randomly.
 
-SPEECH CORRECTION HINTS:
+Common mishearings in Malay speech recognition:
+- "main"/"man"/"magic"/"major"/"mega" = "maggi"
+- "going"/"goring" = "goreng"
+- "camping"/"coming" = "kambing"
+- "green"/"me going" = "mee goreng"
+- "me"/"mi"/"mie"/"ming"/"meet"/"meer" = "mee"
+- "queen teow"/"key toe"/"kway teow" = "kuey teow"
 - "non"/"nun"/"nan"/"none" = "naan"
 - "batu"/"batter" = "butter"
 - "galic"/"gali" = "garlic"
-- "mi"/"mie" = "mee"
-- "aming"/"ayang" = "ayam"
+- "aming"/"ayang"/"i am"/"eye am" = "ayam"
 - "nancy"/"nan si" = "naan cheese"
 - "non batu galic" = "naan butter garlic"
-- "roti canal"/"roti cana" = "roti canai"
-- "teh tariq" = "teh tarik"
+- "roti canal"/"roti cana"/"roti channel" = "roti canai"
+- "teh tariq"/"the tarik"/"tea tarik"/"teh trick" = "teh tarik"
 - "nasi lemak" = "nasi lemak bungkus"
 - "mi goreng"/"mie goreng"/"minggu ring" = "mee goreng"
 - "main goreng" = could be "maggi goreng" or "mee goreng" (use context to decide)
-- "maggie"/"megi"/"meggi" = "maggi"
-- "maggie goreng"/"megi goreng" = "maggi goreng"
+- "maggie"/"megi"/"meggi"/"mackey" = "maggi"
 - "bee hun"/"bi hun"/"mihun" = "bihun"
 - "kuay teow"/"koay teow"/"char kuey teow"/"kuey tiau" = "kuey teow goreng"
-- "indo mee"/"indo mi" = "indomee"
+- "indo mee"/"indo mi"/"indomie" = "indomee"
+- "die ging"/"dye ging" = "daging"
+- "running"/"rending" = "rendang"
+- "my sir"/"my sir" = "mysur"
+- "roti channel"/"roti chenai" = "roti canai"
+- "martabak" = "murtabak"
+- "biryani"/"beriani" = "briyani"
 
 NOODLE ITEMS ON MENU (these are ALL valid - never say they are unavailable):
 - maggi goreng, maggi goreng mamak, maggi goreng ayam, maggi goreng daging, maggi goreng kambing
@@ -854,21 +876,15 @@ If multiple items are ordered, return multiple elements.
 If unclear but you can guess, make your best guess - do NOT return empty.
 Example: [{{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95}}]
 
-Transcript (attempt 1 / best guess): {speech}"""
-
-            # Include speech recognition alternatives if available
-            if alternatives:
-                for i, alt in enumerate(alternatives):
-                    if alt:
-                        deepseek_prompt += f"\nTranscript attempt {i + 2}: {alt}"
-                deepseek_prompt += "\nPick the best match from ALL transcript attempts above. One attempt may have misheard a word that another got right."
+Customer said: "{speech}"{alt_section}
+Pick the most likely correct menu items from these alternatives."""
 
             try:
                 ds_response = deepseek_client.chat.completions.create(
                     model="deepseek-chat",
                     max_tokens=300,
                     messages=[
-                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. Return ONLY valid JSON arrays, nothing else."},
+                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. The customer orders via voice and speech recognition may mishear Malay food words. You receive multiple speech alternatives — use ALL of them to determine the correct menu items. Return ONLY valid JSON arrays, nothing else."},
                         {"role": "user", "content": deepseek_prompt}
                     ]
                 )
@@ -965,12 +981,21 @@ When greeting or unclear:
 
 IMPORTANT: Always respond with valid JSON only - no extra text."""
 
-    # Build user message with alternatives for better accuracy
+    # Build user message with structured alternatives for better accuracy
     user_msg = speech
     if alternatives:
-        alt_text = " | ".join([a for a in alternatives if a])
-        if alt_text:
-            user_msg = f"{speech} (speech recognition also heard: {alt_text})"
+        # Handle both new format [{text, confidence}] and legacy [string] format
+        alt_parts = []
+        for a in alternatives:
+            if isinstance(a, dict):
+                text = a.get("text", "")
+                conf = a.get("confidence", 0)
+                if text and text != speech:
+                    alt_parts.append(f'"{text}" ({conf:.0%})')
+            elif a and a != speech:
+                alt_parts.append(f'"{a}"')
+        if alt_parts:
+            user_msg = f'{speech} (speech alternatives: {" | ".join(alt_parts)})'
 
     response = qwen_client.chat.completions.create(
         model=model,
@@ -1047,6 +1072,73 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         "total": total,
         "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
     }
+
+@app.post("/api/voice/transcribe")
+async def voice_transcribe(request: Request):
+    """
+    Whisper-based server-side speech-to-text endpoint (upgrade path for scale).
+
+    Accepts audio blob from frontend MediaRecorder, transcribes using OpenAI
+    Whisper API with Malay language + food vocabulary hints, then returns the
+    accurate transcript. Frontend should then call /api/voice/chat with the text.
+
+    Usage:
+      1. Frontend records audio via MediaRecorder
+      2. POST audio blob to this endpoint
+      3. Get back accurate Malay transcript
+      4. Frontend calls /api/voice/chat with the transcript as message
+
+    Cost: ~$0.006/min — affordable for 100+ restaurants.
+    Set OPENAI_API_KEY env var to enable.
+    """
+    form = await request.form()
+    audio_file = form.get("audio")
+    table_number = form.get("table_number", "T01")
+
+    if not audio_file:
+        raise HTTPException(status_code=400, detail="No audio file provided")
+
+    # Use OpenAI Whisper API for accurate Malay speech-to-text
+    whisper_api_key = os.getenv("OPENAI_API_KEY")
+    if not whisper_api_key:
+        raise HTTPException(status_code=500, detail="Whisper API not configured (set OPENAI_API_KEY)")
+
+    from order_engine import MENU
+
+    whisper_client = OpenAI(api_key=whisper_api_key)
+
+    # Build food vocabulary prompt to help Whisper recognize Malay food terms
+    menu_items_hint = ", ".join(list(MENU.keys())[:50])
+    whisper_prompt = f"Malay food order: {menu_items_hint}"
+
+    try:
+        import io
+        audio_content = await audio_file.read()
+
+        # Whisper API expects a file-like object with a name
+        audio_buffer = io.BytesIO(audio_content)
+        audio_buffer.name = "recording.webm"
+
+        transcript = whisper_client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_buffer,
+            language="ms",
+            prompt=whisper_prompt
+        )
+
+        transcribed_text = transcript.text.strip()
+        print(f"[Whisper] Transcribed: '{transcribed_text}'")
+
+        return {
+            "text": transcribed_text,
+            "table_number": table_number,
+            "source": "whisper"
+        }
+
+    except Exception as e:
+        print(f"[Whisper] Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Whisper transcription failed: {str(e)}")
+
 
 @app.get("/api/voice/greeting")
 async def voice_greeting():
