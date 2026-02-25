@@ -139,6 +139,9 @@
             display:flex;align-items:center;justify-content:center;gap:10px;
             min-height:54px;flex-shrink:0;
         }
+        .mic-bar.tappable{cursor:pointer;-webkit-tap-highlight-color:transparent}
+        .mic-bar.tappable:active{background:#1A1A1A}
+        .mic-bar.tappable .mic-text{color:#F97316}
 
         /* Listening state */
         .mic-dot{width:10px;height:10px;border-radius:50%;background:#333;flex-shrink:0}
@@ -283,6 +286,8 @@ let currentAudio = null;
 let order = [];          // [{name, qty, price}, ...]
 let panelOpen = false;
 let started = false;
+let micRetryCount = 0;
+const MIC_MAX_RETRIES = 3;
 
 document.getElementById('tableBadge').textContent = TABLE;
 
@@ -355,6 +360,7 @@ function initSpeechRecognition() {
     recognition.maxAlternatives = 3;
 
     recognition.onresult = (e) => {
+        micRetryCount = 0; // Recognition is working — reset retry counter
         const result = e.results[e.resultIndex];
         if (!result) return;
 
@@ -388,8 +394,15 @@ function initSpeechRecognition() {
     };
 
     recognition.onerror = (e) => {
-        if (e.error === 'not-allowed') {
-            setMicState('error', 'Sila benarkan mikrofon');
+        console.log('[VOICE] Speech error:', e.error);
+        if (e.error === 'not-allowed' || e.error === 'service-not-available') {
+            micRetryCount++;
+            if (micRetryCount <= MIC_MAX_RETRIES) {
+                setTimeout(() => { try { recognition.start(); } catch(ex) {} }, 1000);
+            } else {
+                // Show tappable restart — never leave user stuck
+                showMicRecovery();
+            }
         } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
             setTimeout(() => { if (shouldListen && !isPlaying) restartMic(); }, 400);
         }
@@ -397,13 +410,23 @@ function initSpeechRecognition() {
 
     recognition.onend = () => {
         if (shouldListen && !isPlaying) {
-            restartMic();
+            micRetryCount++;
+            if (micRetryCount <= MIC_MAX_RETRIES) {
+                setTimeout(() => {
+                    try { recognition.start(); } catch(e) {}
+                    setMicState('listening');
+                }, 100);
+            } else {
+                // Auto-retries exhausted — show tappable restart
+                showMicRecovery();
+            }
         }
     };
 }
 
 function restartMic() {
     if (!recognition || !shouldListen) return;
+    micRetryCount = 0; // Reset on successful restart
     try { recognition.start(); } catch(e) {}
     setMicState('listening');
 }
@@ -420,8 +443,39 @@ function resumeMic() {
     restartMic();
 }
 
+// Show tappable recovery UI when mic fails
+function showMicRecovery() {
+    micRetryCount = 0;
+    shouldListen = false;
+    setMicState('recovery');
+    console.log('[VOICE] Mic recovery mode — waiting for user tap');
+}
+
+// Full restart: re-request permission, re-init recognition, start fresh
+async function restartListening() {
+    micRetryCount = 0;
+    setMicState('processing');
+    try {
+        // Re-request mic permission from browser
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Permission granted — rebuild recognition and start
+        if (recognition) {
+            try { recognition.stop(); } catch(e) {}
+            recognition = null;
+        }
+        initSpeechRecognition();
+        shouldListen = true;
+        try { recognition.start(); } catch(e) {}
+        setMicState('listening');
+    } catch(e) {
+        console.log('[VOICE] Mic permission denied:', e);
+        setMicState('error', 'Sila benarkan mikrofon di tetapan pelayar');
+    }
+}
+
 function setMicState(state, customText) {
     const bar = document.getElementById('micBar');
+    bar.classList.remove('tappable');
     if (state === 'listening') {
         const label = customText ? esc(customText) : 'Mendengar...';
         bar.innerHTML = '<div class="wave-bars"><span></span><span></span><span></span><span></span><span></span></div><span class="mic-text active">' + label + '</span>';
@@ -431,7 +485,11 @@ function setMicState(state, customText) {
         bar.innerHTML = '<div class="audio-indicator"><div class="audio-bars"><span></span><span></span><span></span><span></span><span></span></div><span>Aisha sedang bercakap...</span></div>';
     } else if (state === 'idle') {
         bar.innerHTML = '<div class="mic-dot"></div><span class="mic-text">Menunggu...</span>';
+    } else if (state === 'recovery') {
+        bar.classList.add('tappable');
+        bar.innerHTML = '<div class="mic-dot"></div><span class="mic-text">Tekan sini untuk mulakan semula</span>';
     } else if (state === 'error') {
+        bar.classList.add('tappable');
         bar.innerHTML = '<div class="mic-dot"></div><span class="mic-text">' + esc(customText || 'Ralat') + '</span>';
     }
 }
@@ -803,6 +861,14 @@ async function submitOrder() {
     if (!order.length) return;
     await sendOrderToTelegram();
 }
+
+// ===== MIC BAR TAP-TO-RESTART =====
+document.getElementById('micBar').addEventListener('click', () => {
+    const bar = document.getElementById('micBar');
+    if (bar.classList.contains('tappable')) {
+        restartListening();
+    }
+});
 </script>
 </body>
 </html>
