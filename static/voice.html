@@ -286,6 +286,510 @@ let started = false;
 
 document.getElementById('tableBadge').textContent = TABLE;
 
+// ===== MALAY SPEECH CORRECTION ENGINE =====
+// All menu item names (from order_engine.py MENU)
+const MENU_ITEMS = [
+    "roti canai susu","roti canai","roti telur bawang","roti telur cheese",
+    "roti telur","roti sardin","roti khawin","roti boom kaya","roti boom",
+    "roti tissue","roti pisang cheese","roti pisang","roti planta",
+    "roti cheese","roti bawang","roti jantan","roti special double",
+    "roti special","roti milo","roti kaya","roti bakar kaya",
+    "roti bakar cheese","roti bakar","murtabak ayam","murtabak daging",
+    "murtabak kambing","naan mozzerella cheese","naan cheese garlic",
+    "naan cheese double","naan cheese","naan garlic","naan butter garlic",
+    "naan butter","naan mumtaj","naan tajmahal","naan biasa",
+    "nasi ayam bawang sayur","nasi ayam bawang","nasi ayam sayur",
+    "nasi ayam rendang","nasi ayam","nasi putih","nasi daging",
+    "nasi lemak bungkus","briyani ayam bawang set","briyani ayam bawang",
+    "briyani ayam goreng set","briyani ayam","briyani kambing set",
+    "briyani kambing","briyani daging set","briyani lamb shank",
+    "nasi goreng kampung","nasi goreng biasa","nasi goreng mamak",
+    "nasi goreng pattaya","nasi goreng seafood","nasi goreng ayam",
+    "maggi goreng telur mata","maggi goreng kambing","maggi goreng daging",
+    "maggi goreng ayam","maggi goreng mamak","maggi goreng basa",
+    "maggi goreng","maggi tomyam","maggi sup",
+    "mee goreng telur mata","mee goreng seafood","mee goreng daging",
+    "mee goreng mamak","mee goreng ayam","mee goreng",
+    "mee campur bihun","mee rebus","mee sup",
+    "bihun goreng telur mata","bihun goreng mamak","bihun goreng",
+    "bihun sup","kuey teow goreng mamak","kuey teow goreng basa",
+    "kuey teow goreng","kuey teow tomyam",
+    "indomee goreng","indomee double","indomee kosong",
+    "kambing mysur","ayam goreng","ayam bawang","ayam tandoori",
+    "ayam rendang","ayam kari","daging rendang",
+    "teh tarik","teh o","kopi tarik","milo","milo dinosaur",
+    "sirap bandung","sirap limau","barli","lychee",
+    "nasi goreng","nasi lemak","capati","tosai","chapati"
+];
+
+// Build sets for scoring
+const FOOD_WORDS = new Set();
+MENU_ITEMS.forEach(item => item.split(' ').forEach(w => FOOD_WORDS.add(w)));
+
+// Sort menu items longest-first for greedy matching in scoring
+const MENU_ITEMS_SORTED = [...MENU_ITEMS].sort((a, b) => b.length - a.length);
+
+// ---- Direct correction map: misheard phrase → correct phrase ----
+// Organized by correct target word/phrase
+const SPEECH_CORRECTIONS = {
+    // === MAGGI (brand name often misheard) ===
+    "main goreng":      "maggi goreng",
+    "magic goreng":     "maggi goreng",
+    "maggie goreng":    "maggi goreng",
+    "mega goreng":      "maggi goreng",
+    "man goreng":       "maggi goreng",
+    "mark goreng":      "maggi goreng",
+    "magi goreng":      "maggi goreng",
+    "mercy goreng":     "maggi goreng",
+    "major goreng":     "maggi goreng",
+    "mackey goreng":    "maggi goreng",
+    "muggy goreng":     "maggi goreng",
+    "monkey goreng":    "maggi goreng",
+    "main tom yam":     "maggi tomyam",
+    "magic tom yam":    "maggi tomyam",
+    "maggie tom yam":   "maggi tomyam",
+    "main tomyam":      "maggi tomyam",
+    "magic tomyam":     "maggi tomyam",
+    "maggie tomyam":    "maggi tomyam",
+    "main sup":         "maggi sup",
+    "magic sup":        "maggi sup",
+    "maggie sup":       "maggi sup",
+
+    // === MEE (often misheard) ===
+    "minggu ring":      "mee goreng",
+    "me goreng":        "mee goreng",
+    "mi goreng":        "mee goreng",
+    "me going":         "mee goreng",
+    "me goring":        "mee goreng",
+    "ming goreng":      "mee goreng",
+    "meet goreng":      "mee goreng",
+    "mea goreng":       "mee goreng",
+    "mere goreng":      "mee goreng",
+    "meer goreng":      "mee goreng",
+    "me green":         "mee goreng",
+    "me ring":          "mee goreng",
+    "mi green":         "mee goreng",
+    "me rebus":         "mee rebus",
+    "mi rebus":         "mee rebus",
+    "me sup":           "mee sup",
+    "mi sup":           "mee sup",
+    "me campur":        "mee campur bihun",
+    "mi campur":        "mee campur bihun",
+
+    // === NASI GORENG ===
+    "nasi going":       "nasi goreng",
+    "nasi goring":      "nasi goreng",
+    "nasi go ring":     "nasi goreng",
+    "nasi green":       "nasi goreng",
+    "nazi goreng":      "nasi goreng",
+    "nasi going kampung":"nasi goreng kampung",
+    "nasi goring kampung":"nasi goreng kampung",
+    "nasi going mamak": "nasi goreng mamak",
+    "nasi goring mamak":"nasi goreng mamak",
+    "nasi going biasa": "nasi goreng biasa",
+    "nasi goring biasa":"nasi goreng biasa",
+    "nasi going pattaya":"nasi goreng pattaya",
+    "nasi going seafood":"nasi goreng seafood",
+    "nasi going ayam":  "nasi goreng ayam",
+
+    // === ROTI CANAI ===
+    "roti channel":     "roti canai",
+    "roti chenai":      "roti canai",
+    "roti chanel":      "roti canai",
+    "roti canal":       "roti canai",
+    "roti china":       "roti canai",
+    "roti chai":        "roti canai",
+    "roti janai":       "roti canai",
+    "roti carnai":      "roti canai",
+    "roti kenai":       "roti canai",
+    "roti cane":        "roti canai",
+    "roti canine":      "roti canai",
+    "roti candy":       "roti canai",
+    "roti cannot":      "roti canai",
+    "roti can I":       "roti canai",
+
+    // === TEH TARIK ===
+    "the tarik":        "teh tarik",
+    "tea tarik":        "teh tarik",
+    "day tarik":        "teh tarik",
+    "de tarik":         "teh tarik",
+    "they tarik":       "teh tarik",
+    "teh trick":        "teh tarik",
+    "take tarik":       "teh tarik",
+    "teh teruk":        "teh tarik",
+    "the trick":        "teh tarik",
+    "the o":            "teh o",
+    "tea o":            "teh o",
+    "they all":         "teh o",
+    "the all":          "teh o",
+
+    // === KUEY TEOW ===
+    "queen teow":       "kuey teow",
+    "queen teo":        "kuey teow",
+    "quit teow":        "kuey teow",
+    "quite ill":        "kuey teow",
+    "key toe":          "kuey teow",
+    "kway teow":        "kuey teow",
+    "kwey teow":        "kuey teow",
+    "kuih teow":        "kuey teow",
+    "queen teow goreng":"kuey teow goreng",
+    "queen teo goreng": "kuey teow goreng",
+    "kway teow goreng": "kuey teow goreng",
+    "kuih teow goreng": "kuey teow goreng",
+
+    // === AYAM ===
+    "i am goreng":      "ayam goreng",
+    "eye am goreng":    "ayam goreng",
+    "iam goreng":       "ayam goreng",
+    "i'm goreng":       "ayam goreng",
+    "i am bawang":      "ayam bawang",
+    "eye am bawang":    "ayam bawang",
+    "i am rendang":     "ayam rendang",
+    "i am kari":        "ayam kari",
+    "i am tandoori":    "ayam tandoori",
+    "i am going":       "ayam goreng",
+    "i'm going":        "ayam goreng",
+
+    // === MILO ===
+    "my low":           "milo",
+    "my lo":            "milo",
+    "mile o":           "milo",
+    "mile oh":          "milo",
+    "my love":          "milo",
+    "mellow":           "milo",
+    "me low":           "milo",
+    "mylow dinosaur":   "milo dinosaur",
+    "mile o dinosaur":  "milo dinosaur",
+
+    // === KOPI ===
+    "coffee tarik":     "kopi tarik",
+    "copy tarik":       "kopi tarik",
+    "coffee trick":     "kopi tarik",
+
+    // === NAAN ===
+    "non cheese":       "naan cheese",
+    "nun cheese":       "naan cheese",
+    "nan cheese":       "naan cheese",
+    "non garlic":       "naan garlic",
+    "nun garlic":       "naan garlic",
+    "nan garlic":       "naan garlic",
+    "non butter":       "naan butter",
+    "nun butter":       "naan butter",
+    "nan butter":       "naan butter",
+    "non biasa":        "naan biasa",
+    "nun biasa":        "naan biasa",
+    "nan biasa":        "naan biasa",
+    "non mozzerella":   "naan mozzerella cheese",
+    "nan mozzerella":   "naan mozzerella cheese",
+    "non mozzarella":   "naan mozzerella cheese",
+    "nan mozzarella":   "naan mozzerella cheese",
+    "non mumtaj":       "naan mumtaj",
+    "nan mumtaj":       "naan mumtaj",
+    "non tajmahal":     "naan tajmahal",
+    "nan tajmahal":     "naan tajmahal",
+    "non taj mahal":    "naan tajmahal",
+    "nan taj mahal":    "naan tajmahal",
+    "naan taj mahal":   "naan tajmahal",
+
+    // === MURTABAK ===
+    "more tab ayam":    "murtabak ayam",
+    "marta back ayam":  "murtabak ayam",
+    "martabak ayam":    "murtabak ayam",
+    "more tab daging":  "murtabak daging",
+    "martabak daging":  "murtabak daging",
+    "more tab kambing": "murtabak kambing",
+    "martabak kambing": "murtabak kambing",
+    "motor back":       "murtabak",
+    "more to back":     "murtabak",
+
+    // === BRIYANI ===
+    "biryani ayam":     "briyani ayam",
+    "beriani ayam":     "briyani ayam",
+    "bryani ayam":      "briyani ayam",
+    "biryani kambing":  "briyani kambing",
+    "beriani kambing":  "briyani kambing",
+    "biryani daging":   "briyani daging",
+    "beriani daging":   "briyani daging",
+    "biryani lamb":     "briyani lamb shank",
+    "beriani lamb":     "briyani lamb shank",
+    "biryani":          "briyani",
+    "beriani":          "briyani",
+    "bryani":           "briyani",
+
+    // === BIHUN ===
+    "be hon goreng":    "bihun goreng",
+    "bee hun goreng":   "bihun goreng",
+    "bi hun goreng":    "bihun goreng",
+    "be hong goreng":   "bihun goreng",
+    "beehoon goreng":   "bihun goreng",
+    "be hon":           "bihun",
+    "bee hun":          "bihun",
+    "beehoon":          "bihun",
+
+    // === SIRAP ===
+    "syrup bandung":    "sirap bandung",
+    "sirup bandung":    "sirap bandung",
+    "syrup limau":      "sirap limau",
+    "sirup limau":      "sirap limau",
+    "syrup ban dong":   "sirap bandung",
+    "serap bandung":    "sirap bandung",
+    "serap limau":      "sirap limau",
+
+    // === INDOMEE ===
+    "indomie goreng":   "indomee goreng",
+    "indo me goreng":   "indomee goreng",
+    "indo mee goreng":  "indomee goreng",
+    "indomie double":   "indomee double",
+    "indomie kosong":   "indomee kosong",
+    "indo me":          "indomee",
+    "indo mi":          "indomee",
+
+    // === GORENG (standalone word corrections) ===
+    "go ring":          "goreng",
+    "going":            "goreng",
+    "goring":           "goreng",
+    "green":            "goreng",
+
+    // === OTHER WORDS ===
+    "coming":           "kambing",
+    "camping":          "kambing",
+    "come being":       "kambing",
+    "come bing":        "kambing",
+    "my sir":           "mysur",
+    "my sure":          "mysur",
+    "my sore":          "mysur",
+    "missour":          "mysur",
+    "cabin":            "khawin",
+    "kevin":            "khawin",
+    "cow in":           "khawin",
+    "car win":          "khawin",
+    "die ging":         "daging",
+    "darling":          "daging",
+    "dodging":          "daging",
+    "running":          "rendang",
+    "run dung":         "rendang",
+    "render":           "rendang",
+    "come pong":        "kampung",
+    "kampong":          "kampung",
+    "camp on":          "kampung",
+    "mama":             "mamak",
+    "momok":            "mamak",
+    "ma mark":          "mamak",
+    "pataya":           "pattaya",
+    "pat thai":         "pattaya",
+    "pat tyre":         "pattaya",
+    "ten degree":       "tandoori",
+    "tan dory":         "tandoori",
+    "tandori":          "tandoori",
+    "tom yam":          "tomyam",
+    "tom yum":          "tomyam",
+    "tommy yam":        "tomyam",
+    "sardine":          "sardin",
+    "badly":            "barli",
+    "barley":           "barli",
+    "barbie":           "barli",
+    "litchi":           "lychee",
+    "leachy":           "lychee",
+    "li chi":           "lychee",
+    "bungkus":          "bungkus",
+    "bong cos":         "bungkus",
+    "bunk us":          "bungkus",
+    "tisu":             "tissue",
+    "boom":             "boom",
+    "plant a":          "planta",
+    "planter":          "planta",
+    "lemons":           "limau",
+    "lee mao":          "limau",
+    "lima u":           "limau",
+    "nasi le mak":      "nasi lemak",
+    "nasi lemon":       "nasi lemak",
+    "nazi lemak":       "nasi lemak"
+};
+
+// Sort correction keys longest-first for greedy replacement
+const CORRECTION_KEYS = Object.keys(SPEECH_CORRECTIONS).sort((a, b) => b.length - a.length);
+
+// ---- Word-level phonetic key for Malay ----
+function malayPhoneticKey(word) {
+    let k = word.toLowerCase()
+        .replace(/ch/g, 'c')
+        .replace(/sh/g, 's')
+        .replace(/th/g, 't')
+        .replace(/ph/g, 'f')
+        .replace(/gh/g, 'g')
+        .replace(/kh/g, 'k')
+        .replace(/ee/g, 'i')
+        .replace(/oo/g, 'u')
+        .replace(/ou/g, 'u')
+        .replace(/ai/g, 'e')
+        .replace(/au/g, 'o')
+        .replace(/ey/g, 'e')
+        .replace(/ay/g, 'e')
+        .replace(/ie/g, 'i')
+        .replace(/ea/g, 'i')
+        .replace(/ck/g, 'k')
+        .replace(/ff/g, 'f')
+        .replace(/ll/g, 'l')
+        .replace(/ss/g, 's')
+        .replace(/tt/g, 't')
+        .replace(/pp/g, 'p')
+        .replace(/mm/g, 'm')
+        .replace(/nn/g, 'n')
+        .replace(/rr/g, 'r')
+        .replace(/ng/g, 'N')
+        .replace(/[^a-zN]/g, '');
+    return k;
+}
+
+// ---- Levenshtein distance ----
+function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const dp = Array.from({length: m + 1}, () => new Array(n + 1));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            dp[i][j] = a[i-1] === b[j-1]
+                ? dp[i-1][j-1]
+                : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+        }
+    }
+    return dp[m][n];
+}
+
+// Pre-compute phonetic keys for all food words
+const FOOD_WORD_PHONETICS = {};
+FOOD_WORDS.forEach(w => { FOOD_WORD_PHONETICS[w] = malayPhoneticKey(w); });
+
+// ---- Fuzzy-match a single word against food vocabulary ----
+function fuzzyMatchWord(word) {
+    if (FOOD_WORDS.has(word)) return word;
+    if (word.length < 3) return word; // too short to fuzzy match reliably
+
+    const pk = malayPhoneticKey(word);
+    let bestWord = null, bestScore = Infinity;
+
+    for (const fw of FOOD_WORDS) {
+        // Skip if length difference is too large
+        if (Math.abs(fw.length - word.length) > 3) continue;
+
+        // Levenshtein on raw text
+        const rawDist = levenshtein(word, fw);
+        // Levenshtein on phonetic keys
+        const phonDist = levenshtein(pk, FOOD_WORD_PHONETICS[fw]);
+        // Combined score (phonetic weighted more)
+        const score = rawDist * 0.4 + phonDist * 0.6;
+
+        // Must be within reasonable distance
+        const threshold = Math.max(2, word.length * 0.4);
+        if (score < threshold && score < bestScore) {
+            bestScore = score;
+            bestWord = fw;
+        }
+    }
+    return bestWord || word;
+}
+
+// ---- Apply direct phrase corrections ----
+function applyDirectCorrections(text) {
+    let result = text.toLowerCase().trim().replace(/\s+/g, ' ');
+    for (const key of CORRECTION_KEYS) {
+        if (result.includes(key)) {
+            result = result.split(key).join(SPEECH_CORRECTIONS[key]);
+        }
+    }
+    return result;
+}
+
+// ---- Score text against menu (higher = more food words matched) ----
+function scoreFoodMatch(text) {
+    let score = 0;
+    const lower = text.toLowerCase();
+    // Bonus for exact menu item matches
+    for (const item of MENU_ITEMS_SORTED) {
+        if (lower.includes(item)) {
+            score += item.split(' ').length * 3;
+        }
+    }
+    // Per-word food vocabulary match
+    const words = lower.split(/\s+/);
+    for (const w of words) {
+        if (FOOD_WORDS.has(w)) score += 1;
+    }
+    return score;
+}
+
+// ---- Full correction pipeline for a single transcript ----
+function correctTranscript(text) {
+    // Step 1: direct phrase corrections
+    let corrected = applyDirectCorrections(text);
+
+    // Step 2: fuzzy-match remaining words not recognized as food
+    const words = corrected.split(/\s+/);
+    const fixedWords = words.map(w => {
+        if (FOOD_WORDS.has(w)) return w;
+        // Check if this word is part of a number or common Malay
+        const commonWords = new Set([
+            'satu','dua','tiga','empat','lima','enam','tujuh','lapan','sembilan','sepuluh',
+            'saya','nak','mau','mahu','tambah','lagi','dan','dengan','satu','ada','itu',
+            'ini','tu','je','jer','aje','saja','sahaja','cukup','dah','boleh','tolong',
+            'tak','tidak','bagi','untuk','yang','confirm','cancel','hantar','pesanan',
+            'order','okay','ok','ya','ye','terima','kasih','set'
+        ]);
+        if (commonWords.has(w)) return w;
+        // Only fuzzy-match words that look like they could be food terms
+        if (w.length >= 3) return fuzzyMatchWord(w);
+        return w;
+    });
+    corrected = fixedWords.join(' ');
+
+    return corrected;
+}
+
+// ---- Pick best alternative from multiple speech results ----
+function pickBestAlternative(results) {
+    // results = [{text, corrected, score}, ...]
+    if (results.length === 0) return '';
+    if (results.length === 1) return results[0].corrected;
+
+    let best = results[0];
+    for (let i = 1; i < results.length; i++) {
+        if (results[i].score > best.score) best = results[i];
+    }
+    return best.corrected;
+}
+
+// ---- Main correction entry point ----
+function correctMalaySpeech(rawText, rawAlternatives) {
+    // Correct primary transcript
+    const primaryCorrected = correctTranscript(rawText);
+    const primaryScore = scoreFoodMatch(primaryCorrected);
+
+    const candidates = [{
+        text: rawText,
+        corrected: primaryCorrected,
+        score: primaryScore
+    }];
+
+    // Correct each alternative
+    if (rawAlternatives && rawAlternatives.length) {
+        for (const alt of rawAlternatives) {
+            const corrected = correctTranscript(alt);
+            const score = scoreFoodMatch(corrected);
+            candidates.push({ text: alt, corrected, score });
+        }
+    }
+
+    const best = pickBestAlternative(candidates);
+    console.log('[Speech] Candidates:', candidates.map(c =>
+        `"${c.text}" → "${c.corrected}" (score:${c.score})`
+    ).join(' | '));
+    console.log('[Speech] Raw: "' + rawText + '" → Corrected: "' + best + '"');
+    return best;
+}
+
 // ===== START =====
 async function startOrder() {
     if (started) return;
@@ -342,23 +846,37 @@ function initSpeechRecognition() {
 
     recognition.lang = 'ms-MY';
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 3;
 
     recognition.onresult = (e) => {
-        const result = e.results[0];
-        if (result && result.isFinal) {
-            const text = result[0].transcript.trim();
-            if (text) {
-                // Collect all alternatives from speech recognition
-                const alternatives = [];
-                if (result[1]) alternatives.push(result[1].transcript.trim());
-                if (result[2]) alternatives.push(result[2].transcript.trim());
-                console.log('[VOICE] Alternatives:', text, alternatives);
-                pauseMic();
-                processMessage(text, alternatives);
-            }
+        const result = e.results[e.resultIndex];
+        if (!result) return;
+
+        const rawText = result[0].transcript.trim();
+        if (!rawText) return;
+
+        if (!result.isFinal) {
+            // Interim result — correct and show live in mic bar
+            const interimCorrected = correctTranscript(rawText);
+            setMicState('listening', interimCorrected);
+            console.log('[Speech] Interim raw: "' + rawText + '" → "' + interimCorrected + '"');
+            return;
         }
+
+        // Final result — collect alternatives, correct, pick best
+        const alternatives = [];
+        if (result[1]) alternatives.push(result[1].transcript.trim());
+        if (result[2]) alternatives.push(result[2].transcript.trim());
+
+        const correctedText = correctMalaySpeech(rawText, alternatives);
+
+        // Build corrected alternatives for the backend
+        const correctedAlts = alternatives.map(a => correctTranscript(a));
+
+        console.log('[VOICE] Final — Raw: "' + rawText + '" | Corrected: "' + correctedText + '"');
+        pauseMic();
+        processMessage(correctedText, correctedAlts);
     };
 
     recognition.onerror = (e) => {
@@ -397,7 +915,8 @@ function resumeMic() {
 function setMicState(state, customText) {
     const bar = document.getElementById('micBar');
     if (state === 'listening') {
-        bar.innerHTML = '<div class="wave-bars"><span></span><span></span><span></span><span></span><span></span></div><span class="mic-text active">Mendengar...</span>';
+        const label = customText ? esc(customText) : 'Mendengar...';
+        bar.innerHTML = '<div class="wave-bars"><span></span><span></span><span></span><span></span><span></span></div><span class="mic-text active">' + label + '</span>';
     } else if (state === 'processing') {
         bar.innerHTML = '<div class="mic-dot"></div><span class="mic-text">Memproses...</span>';
     } else if (state === 'playing') {
