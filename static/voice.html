@@ -317,18 +317,46 @@ function initSpeechRecognition() {
         return;
     }
     recognition = new SR();
+
+    // Grammar hints for Khulafa Bistro menu items
+    const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+    if (SpeechGrammarList) {
+        const grammar = '#JSGF V1.0; grammar menu; public <menu> = ' +
+            'naan | naan cheese | naan garlic | naan butter | naan butter garlic | ' +
+            'naan mozzerella | naan biasa | naan mumtaj | naan tajmahal | ' +
+            'roti canai | roti telur | roti cheese | roti sardin | roti boom | ' +
+            'roti tissue | roti khawin | roti bakar | roti jantan | roti special | ' +
+            'murtabak ayam | murtabak daging | murtabak kambing | ' +
+            'maggi goreng | maggi tomyam | mee goreng | mee rebus | mee sup | ' +
+            'bihun goreng | kuey teow goreng | ' +
+            'nasi ayam | nasi goreng kampung | nasi goreng mamak | nasi lemak | ' +
+            'briyani ayam | briyani kambing | briyani daging | briyani lamb shank | ' +
+            'teh tarik | teh o | kopi tarik | milo | milo dinosaur | ' +
+            'sirap bandung | sirap limau | barli | lychee | ' +
+            'satu | dua | tiga | empat | lima | ' +
+            'itu saja | saja | confirm | hantar pesanan | ada lagi | cancel ;';
+        const speechRecognitionList = new SpeechGrammarList();
+        speechRecognitionList.addFromString(grammar, 1);
+        recognition.grammars = speechRecognitionList;
+    }
+
     recognition.lang = 'ms-MY';
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3;
 
     recognition.onresult = (e) => {
         const result = e.results[0];
         if (result && result.isFinal) {
             const text = result[0].transcript.trim();
             if (text) {
+                // Collect all alternatives from speech recognition
+                const alternatives = [];
+                if (result[1]) alternatives.push(result[1].transcript.trim());
+                if (result[2]) alternatives.push(result[2].transcript.trim());
+                console.log('[VOICE] Alternatives:', text, alternatives);
                 pauseMic();
-                processMessage(text);
+                processMessage(text, alternatives);
             }
         }
     };
@@ -463,16 +491,20 @@ function esc(s) {
 }
 
 // ===== PROCESS MESSAGE =====
-async function processMessage(text) {
+async function processMessage(text, alternatives) {
     addMessage('user', text);
     showTyping();
-    console.log('[VOICE] Processing:', text, '| Current order:', JSON.stringify(order));
+    console.log('[VOICE] Processing:', text, '| Alternatives:', alternatives, '| Current order:', JSON.stringify(order));
 
     try {
+        const payload = { message: text, order: order };
+        if (alternatives && alternatives.length) {
+            payload.alternatives = alternatives;
+        }
         const res = await fetch('/api/voice/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, order: order })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         hideTyping();

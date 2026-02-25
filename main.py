@@ -767,6 +767,7 @@ async def voice_chat(request: Request):
 
     body = await request.json()
     speech = body.get("message", "")
+    alternatives = body.get("alternatives", [])
     current_order = body.get("order", [])
     table = body.get("table_number", "T01")
 
@@ -853,7 +854,14 @@ If multiple items are ordered, return multiple elements.
 If unclear but you can guess, make your best guess - do NOT return empty.
 Example: [{{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95}}]
 
-Transcript: {speech}"""
+Transcript (attempt 1 / best guess): {speech}"""
+
+            # Include speech recognition alternatives if available
+            if alternatives:
+                for i, alt in enumerate(alternatives):
+                    if alt:
+                        deepseek_prompt += f"\nTranscript attempt {i + 2}: {alt}"
+                deepseek_prompt += "\nPick the best match from ALL transcript attempts above. One attempt may have misheard a word that another got right."
 
             try:
                 ds_response = deepseek_client.chat.completions.create(
@@ -957,12 +965,19 @@ When greeting or unclear:
 
 IMPORTANT: Always respond with valid JSON only - no extra text."""
 
+    # Build user message with alternatives for better accuracy
+    user_msg = speech
+    if alternatives:
+        alt_text = " | ".join([a for a in alternatives if a])
+        if alt_text:
+            user_msg = f"{speech} (speech recognition also heard: {alt_text})"
+
     response = qwen_client.chat.completions.create(
         model=model,
         max_tokens=200,
         messages=[
             {"role": "system", "content": qwen_prompt},
-            {"role": "user", "content": speech}
+            {"role": "user", "content": user_msg}
         ],
         extra_body={"enable_thinking": False}
     )
