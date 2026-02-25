@@ -844,7 +844,7 @@ Common mishearings in Malay speech recognition:
 - "teh tariq"/"the tarik"/"tea tarik"/"teh trick" = "teh tarik"
 - "nasi lemak" = "nasi lemak bungkus"
 - "mi goreng"/"mie goreng"/"minggu ring"/"minggu ni"/"mingu ni"/"minggu"/"mingu" = "mee goreng"
-- "main goreng" = could be "maggi goreng" or "mee goreng" (use context to decide)
+- "main goreng"/"may goreng" = "mee goreng" (NOT maggi goreng unless "maggi" is clearly said)
 - "maggie"/"megi"/"meggi"/"mackey" = "maggi"
 - "bee hun"/"bi hun"/"mihun" = "bihun"
 - "kuay teow"/"koay teow"/"char kuey teow"/"kuey tiau"/"kuetiau"/"kway tiaw"/"kwetiau" = "kuey teow goreng"
@@ -855,6 +855,8 @@ Common mishearings in Malay speech recognition:
 - "roti channel"/"roti chenai" = "roti canai"
 - "martabak" = "murtabak"
 - "biryani"/"beriani" = "briyani"
+- "tosai"/"tosei"/"tose"/"dose" = "thosai" (NOT roti family — thosai is its own item)
+- "capati"/"chapatti"/"chapathi" = "chapati"
 
 NOODLE ITEMS ON MENU (these are ALL valid - never say they are unavailable):
 - maggi goreng, maggi goreng mamak, maggi goreng ayam, maggi goreng daging, maggi goreng kambing
@@ -873,8 +875,14 @@ MENU:
 Return ONLY a JSON array of matched items. Each element:
 {{"matched_item": "exact menu item name", "quantity": number, "confidence": float 0-1}}
 
-If multiple items are ordered, return multiple elements.
-If unclear but you can guess, make your best guess - do NOT return empty.
+STRICT RULES:
+- ONLY extract items the customer CLEARLY said. NEVER guess or add extra items.
+- Maximum 3 items per message. If you think there are more, only return the most confident ones.
+- confidence must be >= 0.85 to include an item. If you are not sure, do NOT include it.
+- If NOTHING is clear enough (all below 0.85), return an empty array: []
+- Do NOT hallucinate items that were not spoken. One phrase = one item, not multiple guesses.
+- "dengan"/"dan" means the customer is listing items — extract only what follows each connector.
+
 Example: [{{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95}}]
 
 Customer said: "{speech}"{alt_section}
@@ -885,7 +893,7 @@ Pick the most likely correct menu items from these alternatives."""
                     model="deepseek-chat",
                     max_tokens=300,
                     messages=[
-                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. The customer orders via voice and speech recognition may mishear Malay food words. You receive multiple speech alternatives — use ALL of them to determine the correct menu items. Return ONLY valid JSON arrays, nothing else."},
+                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. The customer orders via voice and speech recognition may mishear Malay food words. You receive multiple speech alternatives — use ALL of them to determine the correct menu items. Return ONLY valid JSON arrays, nothing else. CRITICAL: Only extract items clearly spoken. Never guess or hallucinate extra items. If unsure, return empty array []. Max 3 items per extraction."},
                         {"role": "user", "content": deepseek_prompt}
                     ]
                 )
@@ -903,6 +911,24 @@ Pick the most likely correct menu items from these alternatives."""
                 # Normalize to list
                 if isinstance(deepseek_result, dict):
                     deepseek_result = [deepseek_result]
+
+                # ── Confidence filtering: drop items below 0.85 threshold ──
+                if deepseek_result:
+                    before_count = len(deepseek_result)
+                    deepseek_result = [
+                        item for item in deepseek_result
+                        if item.get("confidence", 0) >= 0.85
+                    ]
+                    # Cap at max 3 items per message
+                    if len(deepseek_result) > 3:
+                        deepseek_result = sorted(
+                            deepseek_result,
+                            key=lambda x: x.get("confidence", 0),
+                            reverse=True
+                        )[:3]
+                    filtered = before_count - len(deepseek_result)
+                    if filtered > 0:
+                        print(f"[DeepSeek] Filtered out {filtered} low-confidence items (threshold: 0.85)")
 
                 print(f"[DeepSeek] Extracted: {deepseek_result}")
             except Exception as e:
@@ -951,6 +977,25 @@ IMPORTANT:
 - "quantities" array = quantity for each item (same order as items array)
 - "action" must be "add"
 - Always respond with valid JSON only"""
+
+    elif is_ordering and not deepseek_result:
+        # DeepSeek returned empty or all items filtered out due to low confidence
+        # Ask customer to repeat instead of guessing
+        print("[Voice] Low confidence / empty extraction — asking customer to repeat")
+        qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
+
+The customer tried to order something but the speech was unclear.
+Customer said: "{speech}"
+
+Our system could not confidently identify any menu items from this speech.
+
+TASK: Politely ask the customer to repeat their order. Be brief and friendly.
+Say something like: "Maaf, boleh sebut semula?" or "Sorry, boleh ulang order?"
+
+RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
+{{"items": [], "quantities": [], "action": "unclear", "reply": "Maaf, boleh sebut semula?"}}
+
+IMPORTANT: Do NOT guess any items. Do NOT add any items. Just ask to repeat."""
 
     else:
         # Non-ordering: greetings, confirmations, cancel etc go straight to Qwen
