@@ -55,15 +55,16 @@ def _build_menu_list() -> str:
 
 AISHA_SYSTEM_PROMPT = f"""You are Aisha, the virtual waitress at Khulafa Bistro. Your role is strictly to take orders.
 
-RULES:
-1. Extract menu item names from customer speech (even if misspelled, slang, or informal Malay)
-2. Reply with ONLY the confirmed item names followed by "Ada lagi?" — nothing else
-3. NEVER suggest or list other menu items
-4. NEVER recommend anything unless the customer explicitly asks (e.g. "apa yang sedap?", "recommend apa?")
-5. When the customer confirms the order ("tu je" / "cukup" / "dah" / "hantar" / "confirm" / "settle" / "setel" / "sekian"), reply with ONLY: CONFIRM_ORDER
-6. Keep every response under 15 words
-7. Understand common Malay speech patterns, slang, and misspellings (e.g. "minggu ring" = "mi goreng", "teh o aih" = "teh o ais", "rotikan ai" = "roti canai", "main goreng" = "maggi goreng" or "mee goreng", "maggie goreng" = "maggi goreng")
-8. CRITICAL: All mee goreng, maggi goreng, bihun, kuey teow, and indomee items ARE on the menu. NEVER say they are unavailable.
+STRICT RULES:
+1. NEVER recommend or suggest menu items on your own
+2. ONLY confirm what customer ordered and say "Ada lagi?"
+3. Keep responses SHORT - max 1 sentence
+4. Example: "Baiklah, mee goreng satu. Ada lagi?"
+5. NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try..."
+6. NEVER list menu categories or suggest promotions
+7. When the customer confirms the order ("tu je" / "cukup" / "dah" / "hantar" / "confirm" / "settle" / "setel" / "sekian"), reply with ONLY: CONFIRM_ORDER
+8. Understand common Malay speech patterns, slang, and misspellings
+9. CRITICAL: All mee goreng, maggi goreng, bihun, kuey teow, and indomee items ARE on the menu. NEVER say they are unavailable.
 
 MENU ITEMS:
 {_build_menu_list()}
@@ -923,8 +924,13 @@ Pick the most likely correct menu items from these alternatives."""
         items_summary = ", ".join(extracted_items) if extracted_items else "unclear"
 
         qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
-Language: Bahasa Melayu + English mix (Malaysian style).
-Be warm and friendly. Keep responses SHORT - max 1-2 sentences.
+
+STRICT RULES:
+- NEVER recommend or suggest menu items on your own
+- ONLY confirm what customer ordered and say "Ada lagi?"
+- Keep responses SHORT - max 1 sentence
+- Example: "Baiklah, mee goreng satu. Ada lagi?"
+- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try..."
 
 The customer said: "{speech}"
 Our order extraction system detected these items: {items_summary}
@@ -934,13 +940,11 @@ MENU ITEMS AVAILABLE:
 
 TASK:
 - Match the extracted items to the closest menu item names
-- Respond naturally as Aisha confirming the items
-- Ask "Ada lagi?" after confirming items
+- Confirm items in 1 short sentence + "Ada lagi?"
 - IMPORTANT: If the item exists in the menu list above, NEVER say it is unavailable
-- Only say "Maaf, [item] takde dalam menu" if the item truly does NOT exist in the menu at all
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
-{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "your response"}}
+{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "Baiklah, [items]. Ada lagi?"}}
 
 IMPORTANT:
 - "items" array = lowercase exact menu item names
@@ -951,24 +955,28 @@ IMPORTANT:
     else:
         # Non-ordering: greetings, confirmations, cancel etc go straight to Qwen
         qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
-Language: Bahasa Melayu + English mix (Malaysian style).
-Be warm and friendly. Keep responses SHORT - max 1-2 sentences.
+
+STRICT RULES:
+- NEVER recommend or suggest menu items on your own
+- ONLY confirm what customer ordered and say "Ada lagi?"
+- Keep responses SHORT - max 1 sentence
+- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try..."
 
 CURRENT ORDER: {json_lib.dumps(current_order) if current_order else "empty"}
 
 The customer said: "{speech}"
 
 Handle this naturally:
-- Greetings: respond warmly ("Hai! Nak order apa hari ni?")
-- Confirmations (tu je/cukup/dah/hantar/confirm/settle/setel/sekian): confirm the order with "Terima kasih! Pesanan sudah dihantar."
-- Cancel/remove: acknowledge the cancellation
-- Questions: answer helpfully
-- If it seems like they're ordering food, try to match to menu items
+- Greetings: "Hai! Nak order apa?"
+- Confirmations (tu je/cukup/dah/hantar/confirm/settle/setel/sekian): "Terima kasih! Pesanan sudah dihantar."
+- Cancel/remove: acknowledge briefly
+- Questions: answer briefly
+- If ordering food, match to menu items
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
 
 When customer orders items:
-{{"items": ["roti canai"], "quantities": [1], "action": "add", "reply": "Roti Canai. Ada lagi?"}}
+{{"items": ["roti canai"], "quantities": [1], "action": "add", "reply": "Baiklah, Roti Canai. Ada lagi?"}}
 
 When customer confirms order:
 {{"items": [], "quantities": [], "action": "confirm", "reply": "Terima kasih! Pesanan sudah dihantar."}}
@@ -999,7 +1007,7 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
 
     response = qwen_client.chat.completions.create(
         model=model,
-        max_tokens=200,
+        max_tokens=100,  # Short responses = faster
         messages=[
             {"role": "system", "content": qwen_prompt},
             {"role": "user", "content": user_msg}
@@ -1043,12 +1051,18 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
                 audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
             new_items.append({"name": item_name.title(), "qty": qty, "price": menu_item["price"]})
 
-    # Add "ada lagi?" audio for add action
+    # Normalize action names for frontend consistency
     if action == "add" and new_items:
+        action = "add_items"
+    if action == "confirm":
+        action = "confirm_order"
+
+    # Add "ada lagi?" audio for add action
+    if action == "add_items" and new_items:
         audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
 
     # Add terima kasih audio for confirm
-    if action == "confirm":
+    if action == "confirm_order":
         audio_matches.append({"audio_path": "/audio/wavs/0021.wav", "audio_exists": True})
 
     # Update order
@@ -1062,12 +1076,16 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
 
     total = sum(i["price"] * i["qty"] for i in updated_order)
 
+    # Build extracted_items list for frontend upsell checking
+    extracted_items = [ni["name"].lower() for ni in new_items]
+
     return {
         "text": reply,
         "audio_matches": audio_matches,
         "has_audio": len(audio_matches) > 0,
         "action": action,
         "new_items": new_items,
+        "extracted_items": extracted_items,
         "order": updated_order,
         "total": total,
         "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
