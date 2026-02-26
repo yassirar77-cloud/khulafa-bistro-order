@@ -296,42 +296,6 @@
 const TABLE = new URLSearchParams(location.search).get('table')
     || location.pathname.split('/').filter(Boolean).pop() || 'T01';
 
-// ===== UPSELL PAIRS (predefined, can be loaded from backend per restaurant later) =====
-const UPSELL_PAIRS = {
-    'naan': { suggest: 'Tandoori', question: 'Tambah Tandoori?' },
-    'naan biasa': { suggest: 'Tandoori', question: 'Tambah Tandoori?' },
-    'naan cheese': { suggest: 'Tandoori', question: 'Tambah Tandoori?' },
-    'naan garlic': { suggest: 'Tandoori', question: 'Tambah Tandoori?' },
-    'naan mozzerella': { suggest: 'Tandoori', question: 'Tambah Tandoori?' },
-    'roti canai': { suggest: 'Kari Ayam', question: 'Dengan Kari Ayam?' },
-    'roti canai telur': { suggest: 'Kari Ayam', question: 'Dengan Kari Ayam?' },
-    'roti canai planta': { suggest: 'Kari Ayam', question: 'Dengan Kari Ayam?' },
-    'tosai': { suggest: 'Sambar & Chutney', question: 'Dengan Sambar?' },
-    'tosai biasa': { suggest: 'Sambar & Chutney', question: 'Dengan Sambar?' },
-    'capati': { suggest: 'Kari Ayam', question: 'Dengan Kari Ayam?' },
-    'nasi goreng': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'nasi goreng kampung': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'nasi goreng biasa': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'nasi goreng mamak': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'maggi goreng': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'maggi goreng biasa': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'mee goreng': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'mee goreng mamak': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'bihun goreng': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'kuey teow goreng': { suggest: 'Telur Mata', question: 'Tambah Telur Mata?' },
-    'briyani': { suggest: 'Papadom', question: 'Tambah Papadom?' },
-    'briyani ayam': { suggest: 'Papadom', question: 'Tambah Papadom?' },
-    'briyani kambing': { suggest: 'Papadom', question: 'Tambah Papadom?' },
-    'briyani daging': { suggest: 'Papadom', question: 'Tambah Papadom?' },
-    'nasi lemak': { suggest: 'Ayam Goreng', question: 'Tambah Ayam Goreng?' },
-    'tomyam': { suggest: 'Nasi Putih', question: 'Dengan Nasi Putih?' },
-    'tomyam ayam': { suggest: 'Nasi Putih', question: 'Dengan Nasi Putih?' },
-    'tomyam seafood': { suggest: 'Nasi Putih', question: 'Dengan Nasi Putih?' },
-    'sup': { suggest: 'Nasi Putih', question: 'Dengan Nasi Putih?' },
-    'teh tarik': { suggest: 'Roti Canai', question: 'Dengan Roti Canai?' },
-    'kopi o': { suggest: 'Roti Canai', question: 'Dengan Roti Canai?' },
-};
-
 // ===== STATE =====
 let recognition = null;
 let shouldListen = false;
@@ -678,12 +642,6 @@ async function processMessage(text, alternatives) {
             updateOrderPanel();
             showOrderPanel();
 
-            // Show text-only add-on suggestion (no audio)
-            if (data.text_suggestion) {
-                addTextSuggestion(data.text_suggestion);
-            }
-
-            // Upsell disabled — system prompt says "no unsolicited suggestions"
         }
 
         // Handle confirm_order — auto-submit order to Telegram
@@ -796,64 +754,6 @@ function showDisambiguationButtons(disambiguateData) {
         chat.appendChild(div);
     });
     chat.scrollTop = chat.scrollHeight;
-}
-
-// ===== TEXT SUGGESTION (no audio) =====
-function addTextSuggestion(text) {
-    const chat = document.getElementById('chat');
-    const div = document.createElement('div');
-    div.className = 'msg ai';
-    div.style.animation = 'msgIn .3s ease';
-    div.innerHTML = '<div class="ic" style="visibility:hidden">A</div><div class="suggestion-bubble">' + esc(text) + '</div>';
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-}
-
-// ===== UPSELL SYSTEM =====
-function checkUpsell(extractedItems) {
-    if (!extractedItems || !extractedItems.length) return;
-    for (const item of extractedItems) {
-        const itemLower = item.toLowerCase();
-        // Check exact match first
-        let upsell = UPSELL_PAIRS[itemLower];
-        if (!upsell) {
-            // Check partial match (e.g. 'nasi goreng kampung' matches 'nasi goreng')
-            for (const [key, val] of Object.entries(UPSELL_PAIRS)) {
-                if (itemLower.includes(key)) { upsell = val; break; }
-            }
-        }
-        if (upsell) {
-            showUpsellButtons(upsell.question, upsell.suggest, item);
-            return; // Only one upsell at a time
-        }
-    }
-}
-
-function showUpsellButtons(question, suggestItem, originalItem) {
-    const chat = document.getElementById('chat');
-    const div = document.createElement('div');
-    div.className = 'upsell-buttons';
-    div.innerHTML =
-        '<span class="upsell-question">' + esc(question) + '</span>' +
-        '<button class="upsell-btn upsell-yes">Ya ✓</button>' +
-        '<button class="upsell-btn upsell-no">Tak ✗</button>';
-
-    // Attach event listeners (safe — no inline onclick with string interpolation)
-    div.querySelector('.upsell-yes').addEventListener('click', function() {
-        div.remove();
-        processMessage('tambah ' + suggestItem);
-    });
-    div.querySelector('.upsell-no').addEventListener('click', function() {
-        div.remove();
-    });
-
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-
-    // Auto-dismiss after 8 seconds (don't block ordering)
-    setTimeout(function() {
-        if (div.parentElement) div.remove();
-    }, 8000);
 }
 
 // ===== ORDER PANEL =====
