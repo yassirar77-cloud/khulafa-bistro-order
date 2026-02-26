@@ -60,11 +60,13 @@ STRICT RULES:
 2. ONLY confirm what customer ordered and say "Ada lagi?"
 3. Keep responses SHORT - max 1 sentence
 4. Example: "Baiklah, mee goreng satu. Ada lagi?"
-5. NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try..."
+5. NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Mahu try...", "Nak tambah..."
 6. NEVER list menu categories or suggest promotions
 7. When the customer confirms the order ("tu je" / "cukup" / "dah" / "hantar" / "confirm" / "settle" / "setel" / "sekian"), reply with ONLY: CONFIRM_ORDER
 8. Understand common Malay speech patterns, slang, and misspellings
 9. CRITICAL: All mee goreng, maggi goreng, bihun, kuey teow, and indomee items ARE on the menu. NEVER say they are unavailable.
+10. NEVER mention any menu item that the customer did NOT order — not as a suggestion, not as an example, not at all.
+11. The "reply" field MUST only contain: confirmation of ordered items + "Ada lagi?" — nothing else.
 
 MENU ITEMS:
 {_build_menu_list()}
@@ -84,6 +86,38 @@ IMPORTANT:
 - Item names in the "items" array MUST be lowercase and match the menu item names exactly when possible
 - If the customer orders something not on the menu, still include it in the items array with best-guess name
 - Always respond with valid JSON only — no extra text before or after"""
+
+
+# Recommendation/upsell phrases to strip from Aisha replies
+_RECOMMENDATION_PATTERNS = [
+    r"cuba\s+juga",
+    r"mungkin\s+nak\s+try",
+    r"kami\s+ada",
+    r"nak\s+tambah",
+    r"boleh\s+cuba",
+    r"mahu\s+try",
+    r"ingin\s+mencuba",
+    r"try\s+juga",
+    r"recommend",
+    r"syorkan",
+    r"cadangkan",
+    r"promosi",
+    r"special\s+hari\s+ini",
+    r"menu\s+hari\s+ini",
+]
+
+def _strip_recommendations(reply: str) -> str:
+    """Remove any recommendation sentences from Aisha's reply."""
+    import re
+    sentences = re.split(r'(?<=[.?!])\s+', reply.strip())
+    clean = []
+    for s in sentences:
+        s_lower = s.lower()
+        if any(re.search(p, s_lower) for p in _RECOMMENDATION_PATTERNS):
+            continue
+        clean.append(s)
+    result = ' '.join(clean).strip()
+    return result if result else reply
 
 # Telegram Bot Configuration
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78")
@@ -930,7 +964,9 @@ STRICT RULES:
 - ONLY confirm what customer ordered and say "Ada lagi?"
 - Keep responses SHORT - max 1 sentence
 - Example: "Baiklah, mee goreng satu. Ada lagi?"
-- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try..."
+- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Nak tambah..."
+- NEVER mention any food item the customer did NOT order
+- The "reply" field must ONLY contain the ordered items + "Ada lagi?" — nothing else
 
 The customer said: "{speech}"
 Our order extraction system detected these items: {items_summary}
@@ -960,7 +996,9 @@ STRICT RULES:
 - NEVER recommend or suggest menu items on your own
 - ONLY confirm what customer ordered and say "Ada lagi?"
 - Keep responses SHORT - max 1 sentence
-- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try..."
+- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Nak tambah..."
+- NEVER mention any food item the customer did NOT order
+- The "reply" field must ONLY contain what the customer ordered + "Ada lagi?" — nothing else
 
 CURRENT ORDER: {json_lib.dumps(current_order) if current_order else "empty"}
 
@@ -1032,7 +1070,7 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
     items = data.get("items", [])
     quantities = data.get("quantities", [])
     action = data.get("action", "unclear")
-    reply = data.get("reply", "")
+    reply = _strip_recommendations(data.get("reply", ""))
 
     # Pad quantities to match items length (default qty=1)
     while len(quantities) < len(items):
