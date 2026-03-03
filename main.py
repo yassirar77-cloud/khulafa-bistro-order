@@ -395,6 +395,19 @@ async def create_order(order: CreateOrder):
     except Exception as e:
         print(f"Error sending order: {e}")
 
+    # Also send to owner if configured and different from cashier
+    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+        owner_payload = {
+            "chat_id": OWNER_CHAT_ID,
+            "text": order_text,
+            "reply_markup": inline_keyboard
+        }
+        try:
+            response = requests.post(url, json=owner_payload)
+            print(f"Order sent to owner with buttons: {response.text}")
+        except Exception as e:
+            print(f"Error sending order to owner: {e}")
+
     return {
         "success": True,
         "order_id": order_id,
@@ -558,6 +571,22 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
             print(f"Payment photo sent to group")
     except Exception as e:
         print(f"Error sending payment photo: {e}")
+
+    # Also send payment photo to owner if configured and different from cashier
+    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+        try:
+            with open(filepath, 'rb') as photo:
+                requests.post(
+                    f"{TELEGRAM_API}/sendPhoto",
+                    data={
+                        'chat_id': OWNER_CHAT_ID,
+                        'caption': f"💳 Payment Receipt\nOrder #{order['order_number']}\nCustomer: {order['customer_name']}\nTotal: RM{order['total_price']:.2f}"
+                    },
+                    files={'photo': photo}
+                )
+                print(f"Payment photo sent to owner")
+        except Exception as e:
+            print(f"Error sending payment photo to owner: {e}")
 
     # Send confirmation to customer
     customer_message = f"""✅ Payment Receipt Received!
