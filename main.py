@@ -146,11 +146,19 @@ def _strip_recommendations(reply: str) -> str:
     result = ' '.join(clean).strip()
     return result if result else reply
 
-# Telegram Bot Configuration
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78")
-TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-CASHIER_CHAT_ID = os.environ.get("CASHIER_CHAT_ID", "-1003483753298")
+# Telegram Bot Configuration — strictly from environment variables
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CASHIER_CHAT_ID = os.environ.get("CASHIER_CHAT_ID", "")
 OWNER_CHAT_ID = os.environ.get("OWNER_CHAT_ID", "")
+
+if not BOT_TOKEN:
+    print("⚠️ TELEGRAM_BOT_TOKEN is not set! Telegram notifications will not work.")
+if not CASHIER_CHAT_ID:
+    print("⚠️ CASHIER_CHAT_ID is not set! Order notifications will not be sent.")
+if not OWNER_CHAT_ID:
+    print("⚠️ OWNER_CHAT_ID is not set! Owner will not receive notifications.")
+
+TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else ""
 
 app = FastAPI(title="Khulafa Bistro API")
 
@@ -379,34 +387,15 @@ async def create_order(order: CreateOrder):
         ]
     }
     
-    print(f"Sending order to Telegram group with action buttons...")
-    
-    # Send message with buttons
-    url = f"{TELEGRAM_API}/sendMessage"
-    payload = {
-        "chat_id": CASHIER_CHAT_ID,
-        "text": order_text,
-        "reply_markup": inline_keyboard
-    }
+    print(f"Sending order {order_number} to Telegram...")
 
-    try:
-        response = requests.post(url, json=payload)
-        print(f"Order sent to cashier with buttons: {response.text}")
-    except Exception as e:
-        print(f"Error sending order: {e}")
+    # Send to cashier with action buttons
+    if CASHIER_CHAT_ID:
+        send_message(CASHIER_CHAT_ID, order_text, reply_markup=inline_keyboard)
 
     # Also send to owner if configured and different from cashier
     if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
-        owner_payload = {
-            "chat_id": OWNER_CHAT_ID,
-            "text": order_text,
-            "reply_markup": inline_keyboard
-        }
-        try:
-            response = requests.post(url, json=owner_payload)
-            print(f"Order sent to owner with buttons: {response.text}")
-        except Exception as e:
-            print(f"Error sending order to owner: {e}")
+        send_message(OWNER_CHAT_ID, order_text, reply_markup=inline_keyboard)
 
     return {
         "success": True,
@@ -558,22 +547,23 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
     conn.close()
 
     # Send payment screenshot to Telegram group
-    try:
-        with open(filepath, 'rb') as photo:
-            requests.post(
-                f"{TELEGRAM_API}/sendPhoto",
-                data={
-                    'chat_id': CASHIER_CHAT_ID,
-                    'caption': f"💳 Payment Receipt\nOrder #{order['order_number']}\nCustomer: {order['customer_name']}\nTotal: RM{order['total_price']:.2f}"
-                },
-                files={'photo': photo}
-            )
-            print(f"Payment photo sent to group")
-    except Exception as e:
-        print(f"Error sending payment photo: {e}")
+    if TELEGRAM_API and CASHIER_CHAT_ID:
+        try:
+            with open(filepath, 'rb') as photo:
+                requests.post(
+                    f"{TELEGRAM_API}/sendPhoto",
+                    data={
+                        'chat_id': CASHIER_CHAT_ID,
+                        'caption': f"💳 Payment Receipt\nOrder #{order['order_number']}\nCustomer: {order['customer_name']}\nTotal: RM{order['total_price']:.2f}"
+                    },
+                    files={'photo': photo}
+                )
+                print(f"Payment photo sent to group")
+        except Exception as e:
+            print(f"Error sending payment photo: {e}")
 
     # Also send payment photo to owner if configured and different from cashier
-    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+    if TELEGRAM_API and OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
         try:
             with open(filepath, 'rb') as photo:
                 requests.post(
@@ -672,6 +662,13 @@ async def confirm_payment(order_id: int):
 # Telegram Helper Functions
 def send_message(chat_id, text, reply_markup=None):
     """Send a Telegram message"""
+    if not BOT_TOKEN:
+        print("❌ Cannot send Telegram message: TELEGRAM_BOT_TOKEN not set")
+        return None
+    if not chat_id:
+        print("❌ Cannot send Telegram message: chat_id is empty")
+        return None
+
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -797,6 +794,10 @@ Khulafa Bistro 🌟"""
 # Run Telegram Bot in Background
 def run_telegram_bot():
     """Run Telegram bot to handle button clicks"""
+    if not BOT_TOKEN:
+        print("❌ Cannot start Telegram bot: TELEGRAM_BOT_TOKEN not set")
+        return
+
     async def start_bot():
         try:
             application = Application.builder().token(BOT_TOKEN).build()

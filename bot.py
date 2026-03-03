@@ -1,3 +1,4 @@
+import os
 import requests
 import logging
 from telegram import Update
@@ -9,10 +10,15 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Bot configuration
-BOT_TOKEN = "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78"
-API_URL = "https://khulafa-bistro-order.onrender.com"
-KITCHEN_GROUP_ID = -1003483753298
+# Bot configuration — strictly from environment variables
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+API_URL = os.environ.get("API_URL", "https://khulafa-bistro-order.onrender.com")
+KITCHEN_GROUP_ID = os.environ.get("CASHIER_CHAT_ID", "")
+
+if not BOT_TOKEN:
+    print("⚠️ TELEGRAM_BOT_TOKEN is not set! Bot will not start.")
+if not KITCHEN_GROUP_ID:
+    print("⚠️ CASHIER_CHAT_ID is not set! Kitchen notifications will not work.")
 
 # Command handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
