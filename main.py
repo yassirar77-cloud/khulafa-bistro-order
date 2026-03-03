@@ -12,7 +12,7 @@ import httpx
 import os
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
-from order_engine import get_engine, MENU
+from order_engine import get_engine, MENU, _SORTED_KEYS
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
@@ -146,6 +146,78 @@ def _strip_recommendations(reply: str) -> str:
         clean.append(s)
     result = ' '.join(clean).strip()
     return result if result else reply
+
+
+def fuzzy_match_menu_item(item_text: str) -> list:
+    """
+    Fuzzy-match a text string to one or more MENU items.
+    Handles partial names (e.g. 'min bandung' -> 'bandung') and compound
+    inputs (e.g. 'sirap ais barli' -> ['sirap ais', 'barli ais']).
+    Returns a list of matched menu keys.
+    """
+    item_text = item_text.lower().strip()
+
+    # Exact match
+    if item_text in MENU:
+        return [item_text]
+
+    # Phase 1: Greedy substring matching — find all MENU keys within item_text
+    length = len(item_text)
+    used = [False] * length
+    matches = []
+
+    for key in _SORTED_KEYS:
+        klen = len(key)
+        start = 0
+        while start <= length - klen:
+            idx = item_text.find(key, start)
+            if idx == -1:
+                break
+            if not any(used[idx:idx + klen]):
+                matches.append(key)
+                for i in range(idx, idx + klen):
+                    used[i] = True
+                start = idx + klen
+            else:
+                start = idx + 1
+
+    # Phase 2: For remaining unmatched words, try prefix matching
+    # e.g. "barli" leftover -> matches "barli ais" (shortest prefix match)
+    remaining_words = []
+    current_word = []
+    for i in range(length):
+        if not used[i]:
+            if item_text[i] != ' ':
+                current_word.append(item_text[i])
+            else:
+                if current_word:
+                    remaining_words.append("".join(current_word))
+                    current_word = []
+        else:
+            if current_word:
+                remaining_words.append("".join(current_word))
+                current_word = []
+    if current_word:
+        remaining_words.append("".join(current_word))
+
+    for word in remaining_words:
+        if len(word) >= 3:
+            candidates = [k for k in _SORTED_KEYS if k.startswith(word + " ") or k == word]
+            if candidates:
+                best = min(candidates, key=len)
+                if best not in matches:
+                    matches.append(best)
+
+    if matches:
+        return matches
+
+    # Phase 3: item_text is contained within a MENU key
+    for key in _SORTED_KEYS:
+        if item_text in key:
+            return [key]
+
+    return []
+
 
 # Telegram Bot Configuration — strictly from environment variables
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -947,6 +1019,16 @@ Common mishearings in Malay speech recognition:
 - "roti channel"/"roti chenai" = "roti canai"
 - "martabak" = "murtabak"
 - "biryani"/"beriani" = "briyani"
+- "my low"/"mi lo"/"mellow" = "milo"
+- "melo ice"/"milo ice" = "milo ais"
+- "copy ice"/"coffee ice"/"kopi ice" = "kopi ais"
+- "copy"/"coffee" = "kopi panas"
+- "banding"/"bandong"/"ban dong"/"min bandung" = "bandung"
+- "sir up"/"serap"/"syrup" = "sirap"
+- "barley"/"bali"/"barely" = "barli"
+- "air crossing"/"air kosmos" = "air kosong"
+- "chin chow"/"chin chou"/"cincao" = "cincau"
+- "long an"/"long gone" = "longan"
 
 NOODLE ITEMS ON MENU (these are ALL valid - never say they are unavailable):
 - maggi goreng, maggi goreng mamak, maggi goreng ayam, maggi goreng daging, maggi goreng kambing
@@ -956,6 +1038,25 @@ NOODLE ITEMS ON MENU (these are ALL valid - never say they are unavailable):
 - bihun goreng, bihun goreng mamak, bihun sup
 - kuey teow goreng, kuey teow goreng mamak, kuey teow tomyam
 - indomee goreng, indomee double, indomee kosong
+
+DRINK ITEMS ON MENU (these are ALL valid - never say they are unavailable):
+- milo ais, milo panas
+- teh tarik, teh ais
+- kopi ais, kopi panas
+- bandung, bandung ais, bandung panas
+- sirap ais, sirap panas
+- barli ais, barli panas
+- air kosong, air mineral
+- cincau, longan
+
+FUZZY MATCHING RULES:
+- If customer says a partial name like "min bandung", match to "bandung"
+- If customer says multiple drink keywords in one phrase like "sirap ais barli", extract MULTIPLE items: "sirap ais" AND "barli ais"
+- Always prefer the longest matching menu item name
+- If customer says just "milo" without hot/cold, default to "milo ais"
+- If customer says just "kopi" without hot/cold, default to "kopi panas"
+- If customer says just "barli" without hot/cold, default to "barli ais"
+- If customer says just "sirap" without hot/cold, default to "sirap ais"
 
 MALAY NUMBER WORDS: satu=1, dua=2, tiga=3, empat=4, lima=5, enam=6, tujuh=7, lapan=8, sembilan=9, sepuluh=10
 
@@ -1143,10 +1244,23 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         item_lower = item_name.lower().strip()
         qty = quantities[idx] if idx < len(quantities) else 1
         if item_lower in MENU:
+            # Exact match
             menu_item = MENU[item_lower]
             if menu_item['audio_id']:
                 audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-            new_items.append({"name": item_name.title(), "qty": qty, "price": menu_item["price"]})
+            new_items.append({"name": item_lower.title(), "qty": qty, "price": menu_item["price"]})
+        else:
+            # Fuzzy match fallback
+            fuzzy_matches = fuzzy_match_menu_item(item_lower)
+            for matched_key in fuzzy_matches:
+                menu_item = MENU[matched_key]
+                if menu_item['audio_id']:
+                    audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
+                new_items.append({"name": matched_key.title(), "qty": qty, "price": menu_item["price"]})
+            if fuzzy_matches:
+                print(f"[FuzzyMatch] '{item_lower}' -> {fuzzy_matches}")
+            else:
+                print(f"[FuzzyMatch] '{item_lower}' -> no match found, dropping")
 
     # Normalize action names for frontend consistency
     if action == "add" and new_items:
