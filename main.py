@@ -146,11 +146,19 @@ def _strip_recommendations(reply: str) -> str:
     result = ' '.join(clean).strip()
     return result if result else reply
 
-# Telegram Bot Configuration
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8278423751:AAEtdsFlIQMLYXHRUh_uoFsl3g-3EdO7P78")
-TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-CASHIER_CHAT_ID = os.environ.get("CASHIER_CHAT_ID", "-1003483753298")
+# Telegram Bot Configuration — strictly from environment variables
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CASHIER_CHAT_ID = os.environ.get("CASHIER_CHAT_ID", "")
 OWNER_CHAT_ID = os.environ.get("OWNER_CHAT_ID", "")
+
+if not BOT_TOKEN:
+    print("⚠️ TELEGRAM_BOT_TOKEN is not set! Telegram notifications will not work.")
+if not CASHIER_CHAT_ID:
+    print("⚠️ CASHIER_CHAT_ID is not set! Order notifications will not be sent.")
+if not OWNER_CHAT_ID:
+    print("⚠️ OWNER_CHAT_ID is not set! Owner will not receive notifications.")
+
+TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else ""
 
 app = FastAPI(title="Khulafa Bistro API")
 
@@ -379,34 +387,15 @@ async def create_order(order: CreateOrder):
         ]
     }
     
-    print(f"Sending order to Telegram group with action buttons...")
-    
-    # Send message with buttons
-    url = f"{TELEGRAM_API}/sendMessage"
-    payload = {
-        "chat_id": CASHIER_CHAT_ID,
-        "text": order_text,
-        "reply_markup": inline_keyboard
-    }
+    print(f"Sending order {order_number} to Telegram...")
 
-    try:
-        response = requests.post(url, json=payload)
-        print(f"Order sent to cashier with buttons: {response.text}")
-    except Exception as e:
-        print(f"Error sending order: {e}")
+    # Send to cashier with action buttons
+    if CASHIER_CHAT_ID:
+        send_message(CASHIER_CHAT_ID, order_text, reply_markup=inline_keyboard)
 
     # Also send to owner if configured and different from cashier
     if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
-        owner_payload = {
-            "chat_id": OWNER_CHAT_ID,
-            "text": order_text,
-            "reply_markup": inline_keyboard
-        }
-        try:
-            response = requests.post(url, json=owner_payload)
-            print(f"Order sent to owner with buttons: {response.text}")
-        except Exception as e:
-            print(f"Error sending order to owner: {e}")
+        send_message(OWNER_CHAT_ID, order_text, reply_markup=inline_keyboard)
 
     return {
         "success": True,
@@ -558,22 +547,23 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
     conn.close()
 
     # Send payment screenshot to Telegram group
-    try:
-        with open(filepath, 'rb') as photo:
-            requests.post(
-                f"{TELEGRAM_API}/sendPhoto",
-                data={
-                    'chat_id': CASHIER_CHAT_ID,
-                    'caption': f"💳 Payment Receipt\nOrder #{order['order_number']}\nCustomer: {order['customer_name']}\nTotal: RM{order['total_price']:.2f}"
-                },
-                files={'photo': photo}
-            )
-            print(f"Payment photo sent to group")
-    except Exception as e:
-        print(f"Error sending payment photo: {e}")
+    if TELEGRAM_API and CASHIER_CHAT_ID:
+        try:
+            with open(filepath, 'rb') as photo:
+                requests.post(
+                    f"{TELEGRAM_API}/sendPhoto",
+                    data={
+                        'chat_id': CASHIER_CHAT_ID,
+                        'caption': f"💳 Payment Receipt\nOrder #{order['order_number']}\nCustomer: {order['customer_name']}\nTotal: RM{order['total_price']:.2f}"
+                    },
+                    files={'photo': photo}
+                )
+                print(f"Payment photo sent to group")
+        except Exception as e:
+            print(f"Error sending payment photo: {e}")
 
     # Also send payment photo to owner if configured and different from cashier
-    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+    if TELEGRAM_API and OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
         try:
             with open(filepath, 'rb') as photo:
                 requests.post(
@@ -672,6 +662,13 @@ async def confirm_payment(order_id: int):
 # Telegram Helper Functions
 def send_message(chat_id, text, reply_markup=None):
     """Send a Telegram message"""
+    if not BOT_TOKEN:
+        print("❌ Cannot send Telegram message: TELEGRAM_BOT_TOKEN not set")
+        return None
+    if not chat_id:
+        print("❌ Cannot send Telegram message: chat_id is empty")
+        return None
+
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -679,8 +676,8 @@ def send_message(chat_id, text, reply_markup=None):
         "parse_mode": "HTML"
     }
     if reply_markup:
-        payload["reply_markup"] = json.dumps(reply_markup)
-    
+        payload["reply_markup"] = reply_markup
+
     try:
         response = requests.post(url, json=payload)
         print(f"Telegram response: {response.text}")
@@ -797,6 +794,10 @@ Khulafa Bistro 🌟"""
 # Run Telegram Bot in Background
 def run_telegram_bot():
     """Run Telegram bot to handle button clicks"""
+    if not BOT_TOKEN:
+        print("❌ Cannot start Telegram bot: TELEGRAM_BOT_TOKEN not set")
+        return
+
     async def start_bot():
         try:
             application = Application.builder().token(BOT_TOKEN).build()
@@ -1258,8 +1259,6 @@ async def voice_greeting():
 
 @app.post("/api/voice/order")
 async def submit_voice_order(request: Request):
-    import httpx
-
     body = await request.json()
     table = body.get("table_number", "T01")
     items = body.get("items", [])
@@ -1268,35 +1267,71 @@ async def submit_voice_order(request: Request):
     if not items:
         return {"status": "error", "message": "No items"}
 
-    items_text = "\n".join([f"  • {i['name']} x{i['qty']} - RM{i['price'] * i['qty']:.2f}" for i in items])
+    # Save order to database
+    conn = get_db()
+    cursor = conn.cursor()
+    order_number = f"KB{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-    message = f"""🎤 VOICE ORDER - MEJA {table}
-⏰ {datetime.now().strftime('%I:%M %p')}
+    total_price = sum(i.get('price', 0) * i.get('qty', 1) for i in items)
 
-{items_text}
+    cursor.execute('''
+        INSERT INTO orders (order_number, customer_telegram_id, customer_name, customer_phone,
+                           order_type, total_price, status, table_number, order_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (order_number, 'voice_qr', f'Table {table}', '',
+          'dine_in', total_price, 'pending', table, 'voice_qr'))
 
-💰 TOTAL: RM{total:.2f}
+    order_id = cursor.lastrowid
 
-➡️ Sila key into POS"""
+    for i in items:
+        cursor.execute('SELECT id, price FROM menu_items WHERE name = ? AND available = 1', (i['name'],))
+        menu_item = cursor.fetchone()
+        menu_item_id = menu_item['id'] if menu_item else 0
+        item_price = menu_item['price'] if menu_item else i.get('price', 0)
 
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    cashier_id = os.getenv("CASHIER_CHAT_ID")
-    owner_id = os.getenv("OWNER_CHAT_ID")
+        cursor.execute('''
+            INSERT INTO order_items (order_id, menu_item_id, quantity, price)
+            VALUES (?, ?, ?, ?)
+        ''', (order_id, menu_item_id, i.get('qty', 1), item_price))
 
-    try:
-        async with httpx.AsyncClient() as client:
-            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-            r1 = await client.post(url, json={"chat_id": cashier_id, "text": message})
-            print(f"Telegram cashier: {r1.status_code} {r1.text}")
+    conn.commit()
+    conn.close()
 
-            if owner_id and str(owner_id) != str(cashier_id):
-                r2 = await client.post(url, json={"chat_id": owner_id, "text": message})
-                print(f"Telegram owner: {r2.status_code} {r2.text}")
-    except Exception as e:
-        print(f"Telegram error: {e}")
-        return {"status": "error", "message": str(e)}
+    # Build Telegram message
+    items_text = "\n".join([f"  • {i['name']} x{i.get('qty', 1)} - RM{i.get('price', 0) * i.get('qty', 1):.2f}" for i in items])
 
-    return {"status": "sent", "table": table, "total": total}
+    message = (
+        f"🎤 VOICE ORDER - MEJA {table}\n"
+        f"📋 Order #: {order_number}\n"
+        f"⏰ {datetime.now().strftime('%I:%M %p')}\n\n"
+        f"{items_text}\n\n"
+        f"💰 TOTAL: RM{total_price:.2f}\n\n"
+        f"➡️ Sila key into POS"
+    )
+
+    # Create inline keyboard with action buttons
+    inline_keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Confirm Order", "callback_data": f"confirm_{order_id}"},
+                {"text": "❌ Cancel Order", "callback_data": f"cancel_{order_id}"}
+            ],
+            [
+                {"text": "🔔 Remind Payment", "callback_data": f"remind_{order_id}"}
+            ]
+        ]
+    }
+
+    # Send to cashier using module-level BOT_TOKEN and CASHIER_CHAT_ID
+    print(f"Sending voice order {order_number} to Telegram...")
+    if CASHIER_CHAT_ID:
+        send_message(CASHIER_CHAT_ID, message, reply_markup=inline_keyboard)
+
+    # Send to owner if configured and different from cashier
+    if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+        send_message(OWNER_CHAT_ID, message, reply_markup=inline_keyboard)
+
+    return {"status": "sent", "table": table, "total": total_price, "order_id": order_id, "order_number": order_number}
 
 @app.post("/api/voice/submit-order")
 async def voice_submit_order(req: VoiceSubmitOrder):
