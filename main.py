@@ -972,6 +972,7 @@ Example: [{{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95}}]
 Customer said: "{speech}"{alt_section}
 Pick the most likely correct menu items from these alternatives."""
 
+            print(f"[Whisper] Raw text: {speech}")
             try:
                 ds_response = deepseek_client.chat.completions.create(
                     model="deepseek-chat",
