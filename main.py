@@ -46,6 +46,33 @@ def get_deepseek_client():
         _deepseek_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
     return _deepseek_client
 
+# ========== OpenAI Whisper STT Setup ==========
+_whisper_client = None
+
+def get_whisper_client():
+    """Lazy-init OpenAI Whisper client for audio transcription."""
+    global _whisper_client
+    if _whisper_client is None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return None
+        _whisper_client = OpenAI(api_key=api_key)
+    return _whisper_client
+
+def transcribe_audio(audio_file_path):
+    """Transcribe an audio file using OpenAI Whisper API with Khulafa menu hints."""
+    client = get_whisper_client()
+    if client is None:
+        raise RuntimeError("OPENAI_API_KEY not set")
+    with open(audio_file_path, "rb") as audio_file:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="ms",
+            prompt="Menu Khulafa: nasi goreng, mee goreng, nasi lemak, roti canai, teh tarik, milo ais, ayam goreng, ikan goreng, minggu ini, hari ini, tambah, kurang, pedas, manis"
+        )
+    return transcript.text
+
 def _build_menu_list() -> str:
     """Build a flat menu list string from the MENU dict for the system prompt."""
     lines = []
@@ -1154,35 +1181,22 @@ async def voice_transcribe(request: Request):
     if not audio_file:
         raise HTTPException(status_code=400, detail="No audio file provided")
 
-    # Use OpenAI Whisper API for accurate Malay speech-to-text
-    whisper_api_key = os.getenv("OPENAI_API_KEY")
-    if not whisper_api_key:
+    if not get_whisper_client():
         raise HTTPException(status_code=500, detail="Whisper API not configured (set OPENAI_API_KEY)")
-
-    from order_engine import MENU
-
-    whisper_client = OpenAI(api_key=whisper_api_key)
-
-    # Build food vocabulary prompt to help Whisper recognize Malay food terms
-    menu_items_hint = ", ".join(list(MENU.keys())[:50])
-    whisper_prompt = f"Malay food order: {menu_items_hint}"
 
     try:
         import io
+        import tempfile
         audio_content = await audio_file.read()
 
-        # Whisper API expects a file-like object with a name
-        audio_buffer = io.BytesIO(audio_content)
-        audio_buffer.name = "recording.webm"
+        # Write to a temp file so transcribe_audio can open it by path
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+            tmp.write(audio_content)
+            tmp_path = tmp.name
 
-        transcript = whisper_client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_buffer,
-            language="ms",
-            prompt=whisper_prompt
-        )
+        transcribed_text = transcribe_audio(tmp_path).strip()
+        os.unlink(tmp_path)
 
-        transcribed_text = transcript.text.strip()
         print(f"[Whisper] Transcribed: '{transcribed_text}'")
 
         return {
@@ -1191,6 +1205,8 @@ async def voice_transcribe(request: Request):
             "source": "whisper"
         }
 
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         print(f"[Whisper] Error: {e}")
         raise HTTPException(status_code=500, detail=f"Whisper transcription failed: {str(e)}")
