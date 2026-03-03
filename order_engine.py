@@ -140,6 +140,25 @@ MENU = {
     "ayam rendang":             ("0251", 8.00),
     "ayam kari":                ("0254", 7.00),
     "daging rendang":           ("0258", 10.00),
+
+    # === MINUMAN (DRINKS) ===
+    "milo ais":                 ("", 3.30),
+    "milo panas":               ("", 2.80),
+    "teh tarik":                ("", 2.00),
+    "teh ais":                  ("", 2.20),
+    "kopi ais":                 ("", 2.20),
+    "kopi panas":               ("", 1.70),
+    "bandung":                  ("", 2.50),
+    "bandung ais":              ("", 3.00),
+    "bandung panas":            ("", 2.50),
+    "sirap ais":                ("", 2.00),
+    "sirap panas":              ("", 1.80),
+    "barli ais":                ("", 2.50),
+    "barli panas":              ("", 2.00),
+    "air kosong":               ("", 0.30),
+    "air mineral":              ("", 1.50),
+    "cincau":                   ("", 3.00),
+    "longan":                   ("", 3.50),
 }
 
 # Convert tuple format to dict format for consistent access
