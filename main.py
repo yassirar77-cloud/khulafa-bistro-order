@@ -71,6 +71,7 @@ def transcribe_audio(audio_file_path):
             language="ms",
             prompt="Menu Khulafa: nasi goreng, mee goreng, nasi lemak, roti canai, teh tarik, milo ais, ayam goreng, ikan goreng, minggu ini, hari ini, tambah, kurang, pedas, manis"
         )
+    print(f"[Whisper] Transcribed: {transcript.text}")
     return transcript.text
 
 def _build_menu_list() -> str:
