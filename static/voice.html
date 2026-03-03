@@ -154,9 +154,10 @@ html,body { height:100%; background:var(--dark); font-family:'Segoe UI',system-u
 #orderSent.show { opacity:1; pointer-events:all; }
 .success-ring { width:140px; height:140px; border-radius:50%; border:4px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:64px; margin-bottom:28px; animation:successPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275); box-shadow:0 0 60px rgba(212,168,67,0.3); }
 @keyframes successPop { from{transform:scale(0);opacity:0;} to{transform:scale(1);opacity:1;} }
-.success-title { font-size:32px; font-weight:800; color:var(--gold); margin-bottom:10px; }
+.success-title { font-size:26px; font-weight:800; color:var(--gold); margin-bottom:10px; text-align:center; padding:0 20px; }
 .success-sub { font-size:16px; color:rgba(255,255,255,0.5); margin-bottom:40px; text-align:center; padding:0 20px; }
 .success-table { background:rgba(212,168,67,0.1); border:1px solid rgba(212,168,67,0.3); padding:12px 28px; border-radius:12px; color:var(--gold); font-size:15px; font-weight:600; }
+.success-dismiss { margin-top:32px; font-size:13px; color:rgba(255,255,255,0.3); letter-spacing:0.5px; }
 </style>
 </head>
 <body>
@@ -200,10 +201,11 @@ html,body { height:100%; background:var(--dark); font-family:'Segoe UI',system-u
 </div>
 
 <div id="orderSent">
-  <div class="success-ring">✓</div>
-  <div class="success-title">Order Dihantar!</div>
-  <div class="success-sub">Makanan sedang disediakan.<br>Terima kasih kerana makan di Khulafa!</div>
-  <div class="success-table" id="successTable">Table —</div>
+  <div class="success-ring">✅</div>
+  <div class="success-title">Pesanan Anda Telah Dihantar!</div>
+  <div class="success-sub">Terima kasih. Pesanan anda sedang disediakan.<br>Sila tunggu sebentar.</div>
+  <div class="success-table" id="successTable">Meja: —</div>
+  <div class="success-dismiss">Halaman ini boleh ditutup</div>
 </div>
 
 <script>
@@ -223,7 +225,7 @@ const MIC_MAX_RETRIES = 3;
 
 document.getElementById('splashTable').textContent = 'Table ' + TABLE;
 document.getElementById('tableBadge').textContent = 'Table ' + TABLE;
-document.getElementById('successTable').textContent = 'Table ' + TABLE;
+document.getElementById('successTable').textContent = 'Meja: ' + TABLE;
 
 // ===== START SESSION =====
 function startSession() {
@@ -487,15 +489,23 @@ async function processMessage(text, alternatives) {
         const orderData = await orderRes.json();
 
         if (orderData.status === 'sent') {
+          shouldListen = false;
+          try { recognition.stop(); } catch(e) {}
           showOrderSent();
           try { await playSingleAudio('/audio/wavs/0021.wav'); } catch(e) {}
           setTimeout(() => {
             document.getElementById('orderSent').classList.remove('show');
+            document.getElementById('app').style.display = '';
+            document.getElementById('chatArea').innerHTML = '';
             order = [];
-            addAiMsg('Ada pesanan lain? Saya sedia membantu.');
             isProcessing = false;
-            resumeMic();
-          }, 5000);
+            isPlaying = false;
+            shouldListen = false;
+            // Reset to splash/greeting screen
+            const splash = document.getElementById('splash');
+            splash.style.display = '';
+            splash.classList.remove('hide');
+          }, 10000);
           return;
         } else {
           addAiMsg('Maaf, terdapat masalah menghantar pesanan. Sila cuba sekali lagi.');
@@ -546,6 +556,7 @@ function addMore() {
 
 function showOrderSent() {
   document.querySelectorAll('.order-card').forEach(c => c.remove());
+  document.getElementById('app').style.display = 'none';
   document.getElementById('orderSent').classList.add('show');
 }
 
