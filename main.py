@@ -268,6 +268,13 @@ if not OWNER_CHAT_ID:
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else ""
 
+# Startup diagnostic: show configured Telegram recipients
+print(f"[Telegram Config] BOT_TOKEN: {'SET ✅' if BOT_TOKEN else 'NOT SET ❌'}")
+print(f"[Telegram Config] CASHIER_CHAT_ID: {CASHIER_CHAT_ID if CASHIER_CHAT_ID else 'NOT SET ❌'}")
+print(f"[Telegram Config] OWNER_CHAT_ID: {OWNER_CHAT_ID if OWNER_CHAT_ID else 'NOT SET ❌'}")
+if CASHIER_CHAT_ID and OWNER_CHAT_ID and CASHIER_CHAT_ID == OWNER_CHAT_ID:
+    print("[Telegram Config] ⚠️ CASHIER_CHAT_ID and OWNER_CHAT_ID are the SAME — owner will NOT receive duplicate messages")
+
 app = FastAPI(title="Khulafa Bistro API")
 
 # Mount audio files for Aisha voice system
@@ -656,9 +663,10 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
 
     # Send payment screenshot to Telegram group
     if TELEGRAM_API and CASHIER_CHAT_ID:
+        print(f"[Telegram] Sending payment photo to CASHIER: {CASHIER_CHAT_ID}")
         try:
             with open(filepath, 'rb') as photo:
-                requests.post(
+                resp = requests.post(
                     f"{TELEGRAM_API}/sendPhoto",
                     data={
                         'chat_id': CASHIER_CHAT_ID,
@@ -666,15 +674,21 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
                     },
                     files={'photo': photo}
                 )
-                print(f"Payment photo sent to group")
+                result = resp.json()
+                if result.get("ok"):
+                    print(f"[Telegram] ✅ Payment photo sent to CASHIER ({CASHIER_CHAT_ID})")
+                else:
+                    print(f"[Telegram] ❌ FAILED sending photo to CASHIER ({CASHIER_CHAT_ID}): "
+                          f"[{result.get('error_code', '?')}] {result.get('description', 'Unknown error')}")
         except Exception as e:
-            print(f"Error sending payment photo: {e}")
+            print(f"[Telegram] ❌ Exception sending payment photo to CASHIER ({CASHIER_CHAT_ID}): {e}")
 
     # Also send payment photo to owner if configured and different from cashier
     if TELEGRAM_API and OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+        print(f"[Telegram] Sending payment photo to OWNER: {OWNER_CHAT_ID}")
         try:
             with open(filepath, 'rb') as photo:
-                requests.post(
+                resp = requests.post(
                     f"{TELEGRAM_API}/sendPhoto",
                     data={
                         'chat_id': OWNER_CHAT_ID,
@@ -682,9 +696,14 @@ async def upload_payment_slip(order_id: int, file: UploadFile = File(...)):
                     },
                     files={'photo': photo}
                 )
-                print(f"Payment photo sent to owner")
+                result = resp.json()
+                if result.get("ok"):
+                    print(f"[Telegram] ✅ Payment photo sent to OWNER ({OWNER_CHAT_ID})")
+                else:
+                    print(f"[Telegram] ❌ FAILED sending photo to OWNER ({OWNER_CHAT_ID}): "
+                          f"[{result.get('error_code', '?')}] {result.get('description', 'Unknown error')}")
         except Exception as e:
-            print(f"Error sending payment photo to owner: {e}")
+            print(f"[Telegram] ❌ Exception sending payment photo to OWNER ({OWNER_CHAT_ID}): {e}")
 
     # Send confirmation to customer
     customer_message = f"""✅ Payment Receipt Received!
@@ -777,6 +796,17 @@ def send_message(chat_id, text, reply_markup=None):
         print("❌ Cannot send Telegram message: chat_id is empty")
         return None
 
+    # Identify which recipient this is for
+    recipient_label = "unknown"
+    if str(chat_id) == str(CASHIER_CHAT_ID):
+        recipient_label = "CASHIER"
+    elif str(chat_id) == str(OWNER_CHAT_ID):
+        recipient_label = "OWNER"
+    else:
+        recipient_label = "CUSTOMER"
+
+    print(f"[Telegram] Sending to {recipient_label}: {chat_id}")
+
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -788,10 +818,19 @@ def send_message(chat_id, text, reply_markup=None):
 
     try:
         response = requests.post(url, json=payload)
-        print(f"Telegram response: {response.text}")
-        return response.json()
+        result = response.json()
+        if result.get("ok"):
+            print(f"[Telegram] ✅ Message sent successfully to {recipient_label} ({chat_id})")
+        else:
+            error_code = result.get("error_code", "?")
+            description = result.get("description", "Unknown error")
+            print(f"[Telegram] ❌ FAILED to send to {recipient_label} ({chat_id}): [{error_code}] {description}")
+            if error_code == 403:
+                print(f"[Telegram] ⚠️ Bot was blocked or /start was never sent by chat_id {chat_id}. "
+                      f"The user must send /start to the bot first!")
+        return result
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f"[Telegram] ❌ Exception sending to {recipient_label} ({chat_id}): {e}")
         return None
 
 def send_customer_notification(customer_telegram_id: str, order, status: str):
