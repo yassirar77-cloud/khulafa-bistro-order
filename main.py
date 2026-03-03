@@ -69,7 +69,42 @@ def transcribe_audio(audio_file_path):
             model="whisper-1",
             file=audio_file,
             language="ms",
-            prompt="Menu Khulafa: nasi goreng, mee goreng, nasi lemak, roti canai, teh tarik, milo ais, ayam goreng, ikan goreng, minggu ini, hari ini, tambah, kurang, pedas, manis"
+            prompt=(
+                "Pelanggan sedang membuat pesanan makanan di restoran Khulafa. "
+                "Menu kami: roti canai, roti canai susu, roti telur, roti telur bawang, "
+                "roti telur cheese, roti sardin, roti khawin, roti boom, roti boom kaya, "
+                "roti tissue, roti pisang, roti pisang cheese, roti planta, roti cheese, "
+                "roti bawang, roti jantan, roti special, roti special double, roti milo, "
+                "roti kaya, roti bakar, roti bakar kaya, roti bakar cheese, "
+                "murtabak ayam, murtabak daging, murtabak kambing, "
+                "naan biasa, naan cheese, naan garlic, naan butter, naan butter garlic, "
+                "naan cheese garlic, naan cheese double, naan mozzerella cheese, "
+                "naan mumtaj, naan tajmahal, "
+                "nasi ayam, nasi ayam bawang, nasi ayam sayur, nasi ayam bawang sayur, "
+                "nasi ayam rendang, nasi putih, nasi daging, nasi lemak bungkus, "
+                "briyani ayam, briyani ayam bawang, briyani ayam bawang set, "
+                "briyani ayam goreng set, briyani kambing, briyani kambing set, "
+                "briyani daging set, briyani lamb shank, "
+                "nasi goreng kampung, nasi goreng biasa, nasi goreng mamak, "
+                "nasi goreng pattaya, nasi goreng seafood, nasi goreng ayam, "
+                "maggi goreng, maggi goreng mamak, maggi goreng basa, maggi goreng ayam, "
+                "maggi goreng daging, maggi goreng kambing, maggi goreng telur mata, "
+                "maggi tomyam, maggi sup, "
+                "mee goreng, mee goreng mamak, mee goreng ayam, mee goreng daging, "
+                "mee goreng seafood, mee goreng telur mata, mee campur bihun, "
+                "mee rebus, mee sup, "
+                "bihun goreng, bihun goreng mamak, bihun goreng telur mata, bihun sup, "
+                "kuey teow goreng, kuey teow goreng mamak, kuey teow goreng basa, "
+                "kuey teow tomyam, "
+                "indomee goreng, indomee double, indomee kosong, "
+                "kambing mysur, ayam goreng, ayam bawang, ayam tandoori, "
+                "ayam rendang, ayam kari, daging rendang, "
+                "milo ais, milo panas, teh tarik, teh ais, kopi ais, kopi panas, "
+                "bandung, bandung ais, bandung panas, sirap ais, sirap panas, "
+                "barli ais, barli panas, air kosong, air mineral, cincau, longan, "
+                "tambah, kurang, pedas, manis, satu, dua, tiga, empat, lima, "
+                "enam, tujuh, lapan, sembilan, sepuluh, itu saja, terima kasih"
+            )
         )
     print(f"[Whisper] Transcribed: {transcript.text}")
     return transcript.text
