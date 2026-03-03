@@ -212,14 +212,11 @@ const TABLE = new URLSearchParams(location.search).get('table')
     || location.pathname.split('/').filter(Boolean).pop() || 'T01';
 
 // ===== STATE =====
-let recognition = null;
 let shouldListen = false;
 let isPlaying = false;
 let isProcessing = false;
 let currentAudio = null;
 let order = [];          // [{name, qty, price}, ...]
-let micRetryCount = 0;
-const MIC_MAX_RETRIES = 3;
 
 document.getElementById('splashTable').textContent = 'Table ' + TABLE;
 document.getElementById('tableBadge').textContent = 'Table ' + TABLE;
@@ -256,158 +253,130 @@ async function initChat() {
   }
 
   setStatus('Bersedia');
-  // Start listening automatically
-  shouldListen = true;
-  try { recognition.start(); } catch(e) {}
+  // Whisper mode: wait for user to tap mic button (push-to-talk)
 }
 
-// ===== SPEECH RECOGNITION =====
+// ===== WHISPER SPEECH-TO-TEXT (via MediaRecorder + Server API) =====
+let mediaRecorder = null;
+let audioChunks = [];
+let audioStream = null;
+
 function initSpeechRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { addSystemMsg('⚠️ Sila guna Chrome untuk voice ordering.'); return; }
+  // Whisper-based: no browser SpeechRecognition needed
+  // MediaRecorder will be initialized on first mic use
+  console.log('[VOICE] Using OpenAI Whisper API for speech-to-text');
+}
 
-  recognition = new SR();
+async function startRecording() {
+  try {
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm;codecs=opus' });
 
-  // Grammar hints for Khulafa Bistro menu items
-  const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
-  if (SpeechGrammarList) {
-    const grammar = '#JSGF V1.0; grammar menu; public <menu> = ' +
-      'naan | naan cheese | naan garlic | naan butter | naan butter garlic | ' +
-      'naan mozzerella | naan biasa | naan mumtaj | naan tajmahal | ' +
-      'roti canai | roti telur | roti cheese | roti sardin | roti boom | ' +
-      'roti tissue | roti khawin | roti bakar | roti jantan | roti special | ' +
-      'murtabak ayam | murtabak daging | murtabak kambing | ' +
-      'maggi goreng | maggi tomyam | mee goreng | mee rebus | mee sup | ' +
-      'bihun goreng | kuey teow goreng | ' +
-      'nasi ayam | nasi goreng kampung | nasi goreng mamak | nasi lemak | ' +
-      'briyani ayam | briyani kambing | briyani daging | briyani lamb shank | ' +
-      'teh tarik | teh o | kopi tarik | milo | milo dinosaur | ' +
-      'sirap bandung | sirap limau | barli | lychee | ' +
-      'satu | dua | tiga | empat | lima | ' +
-      'itu saja | saja | confirm | hantar pesanan | ada lagi | cancel ;';
-    const speechRecognitionList = new SpeechGrammarList();
-    speechRecognitionList.addFromString(grammar, 1);
-    recognition.grammars = speechRecognitionList;
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      // Stop all tracks to release microphone
+      if (audioStream) { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
+
+      if (audioChunks.length === 0) {
+        setMicState('idle');
+        setStatus('Bersedia');
+        return;
+      }
+
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      audioChunks = [];
+
+      // Send to Whisper API for transcription
+      setMicState('processing');
+      setStatus('Mengecam suara...');
+
+      try {
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'recording.webm');
+
+        const res = await fetch('/api/voice/transcribe', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) throw new Error('Transcription failed');
+        const data = await res.json();
+        const text = (data.text || '').trim();
+
+        if (text) {
+          console.log('[VOICE] Whisper transcript:', text);
+          processMessage(text, [{ text: text, confidence: 1.0 }]);
+        } else {
+          setMicState('idle');
+          setStatus('Bersedia');
+          addSystemMsg('Maaf, tidak dapat mengesan suara. Cuba lagi.');
+        }
+      } catch (e) {
+        console.error('[VOICE] Whisper transcription error:', e);
+        setMicState('idle');
+        setStatus('Bersedia');
+        addSystemMsg('Maaf, masalah mengecam suara. Cuba lagi.');
+      }
+    };
+
+    mediaRecorder.start();
+    setMicState('listening');
+    setStatus('Mendengar...');
+    shouldListen = true;
+    console.log('[VOICE] Recording started');
+  } catch (e) {
+    console.error('[VOICE] Mic permission denied:', e);
+    setStatus('Sila benarkan mikrofon di tetapan pelayar');
   }
+}
 
-  recognition.lang = 'ms-MY';
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 3;
-
-  recognition.onstart = () => { setMicState('listening'); setStatus('Mendengar...'); };
-
-  recognition.onresult = (e) => {
-    micRetryCount = 0;
-    const result = e.results[e.resultIndex];
-    if (!result) return;
-
-    const rawText = result[0].transcript.trim();
-    if (!rawText) return;
-
-    if (!result.isFinal) {
-      setStatus('"' + rawText + '"');
-      return;
-    }
-
-    // Collect ALL alternatives with confidence scores
-    const alternatives = [];
-    for (let a = 0; a < result.length; a++) {
-      alternatives.push({
-        text: result[a].transcript.trim(),
-        confidence: result[a].confidence
-      });
-    }
-
-    const displayText = alternatives[0].text;
-    console.log('[VOICE] Final — Raw alternatives:', alternatives.map(a =>
-      '"' + a.text + '" (' + (a.confidence * 100).toFixed(0) + '%)'
-    ).join(' | '));
-
-    pauseMic();
-    processMessage(displayText, alternatives);
-  };
-
-  recognition.onerror = (e) => {
-    console.log('[VOICE] Speech error:', e.error);
-    if (e.error === 'not-allowed' || e.error === 'service-not-available') {
-      micRetryCount++;
-      if (micRetryCount <= MIC_MAX_RETRIES) {
-        setTimeout(() => { try { recognition.start(); } catch(ex) {} }, 1000);
-      } else {
-        showMicRecovery();
-      }
-    } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
-      setTimeout(() => { if (shouldListen && !isPlaying) restartMic(); }, 400);
-    }
-  };
-
-  recognition.onend = () => {
-    if (shouldListen && !isPlaying && !isProcessing) {
-      micRetryCount++;
-      if (micRetryCount <= MIC_MAX_RETRIES) {
-        setTimeout(() => {
-          try { recognition.start(); } catch(e) {}
-        }, 100);
-      } else {
-        showMicRecovery();
-      }
-    }
-  };
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    console.log('[VOICE] Recording stopped');
+  }
+  shouldListen = false;
 }
 
 function toggleMic() {
   if (isProcessing || isPlaying) return;
-  if (shouldListen) {
-    pauseMic();
-    setMicState('idle');
-    setStatus('Bersedia');
+  if (shouldListen && mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecording();
   } else {
-    shouldListen = true;
-    restartMic();
+    startRecording();
   }
 }
 
 function restartMic() {
-  if (!recognition || !shouldListen) return;
-  micRetryCount = 0;
-  try { recognition.start(); } catch(e) {}
+  // No-op for Whisper mode — user manually taps to record
 }
 
 function pauseMic() {
-  shouldListen = false;
-  try { recognition.stop(); } catch(e) {}
+  stopRecording();
   setMicState('processing');
 }
 
 function resumeMic() {
-  if (!recognition) return;
-  shouldListen = true;
-  restartMic();
+  // In Whisper mode, don't auto-start recording — wait for user tap
+  shouldListen = false;
+  setMicState('idle');
+  setStatus('Bersedia');
 }
 
 function showMicRecovery() {
-  micRetryCount = 0;
   shouldListen = false;
   setMicState('idle');
   setStatus('Tekan butang untuk cuba semula');
   console.log('[VOICE] Mic recovery mode — waiting for user tap');
 }
 
-// Full restart: re-request permission, re-init recognition, start fresh
 async function restartListening() {
-  micRetryCount = 0;
-  setMicState('processing');
-  try {
-    await navigator.mediaDevices.getUserMedia({ audio: true });
-    if (recognition) { try { recognition.stop(); } catch(e) {} recognition = null; }
-    initSpeechRecognition();
-    shouldListen = true;
-    try { recognition.start(); } catch(e) {}
-  } catch(e) {
-    console.log('[VOICE] Mic permission denied:', e);
-    setStatus('Sila benarkan mikrofon di tetapan pelayar');
-  }
+  setMicState('idle');
+  setStatus('Bersedia');
 }
 
 // ===== PROCESS MESSAGE =====

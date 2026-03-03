@@ -17,7 +17,35 @@ from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
+import tempfile
 from openai import OpenAI
+
+# ========== OpenAI Whisper API Setup (Speech-to-Text) ==========
+_whisper_client = None
+
+def get_whisper_client():
+    """Lazy-init OpenAI client for Whisper speech-to-text."""
+    global _whisper_client
+    if _whisper_client is None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return None
+        _whisper_client = OpenAI(api_key=api_key)
+    return _whisper_client
+
+def transcribe_audio(audio_file_path):
+    """Transcribe audio file using OpenAI Whisper API."""
+    client = get_whisper_client()
+    if not client:
+        raise ValueError("OPENAI_API_KEY not set")
+    with open(audio_file_path, "rb") as audio_file:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="ms",
+            prompt="Menu Khulafa: nasi goreng, mee goreng, nasi lemak, roti canai, teh tarik, milo ais, ayam goreng, ikan goreng, minggu ini, hari ini, tambah, kurang, pedas, manis"
+        )
+    return transcript.text
 
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
@@ -787,6 +815,27 @@ async def serve_voice_page(table_number: str):
 
     return FileResponse("static/voice.html")
 
+@app.post("/api/voice/transcribe")
+async def voice_transcribe(file: UploadFile = File(...)):
+    """Transcribe uploaded audio using OpenAI Whisper API."""
+    client = get_whisper_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+
+    suffix = Path(file.filename).suffix if file.filename else ".webm"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        text = transcribe_audio(tmp_path)
+        return {"text": text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+    finally:
+        os.unlink(tmp_path)
+
 @app.post("/api/voice/chat")
 async def voice_chat(request: Request):
     """
@@ -1128,73 +1177,6 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         "total": total,
         "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
     }
-
-@app.post("/api/voice/transcribe")
-async def voice_transcribe(request: Request):
-    """
-    Whisper-based server-side speech-to-text endpoint (upgrade path for scale).
-
-    Accepts audio blob from frontend MediaRecorder, transcribes using OpenAI
-    Whisper API with Malay language + food vocabulary hints, then returns the
-    accurate transcript. Frontend should then call /api/voice/chat with the text.
-
-    Usage:
-      1. Frontend records audio via MediaRecorder
-      2. POST audio blob to this endpoint
-      3. Get back accurate Malay transcript
-      4. Frontend calls /api/voice/chat with the transcript as message
-
-    Cost: ~$0.006/min — affordable for 100+ restaurants.
-    Set OPENAI_API_KEY env var to enable.
-    """
-    form = await request.form()
-    audio_file = form.get("audio")
-    table_number = form.get("table_number", "T01")
-
-    if not audio_file:
-        raise HTTPException(status_code=400, detail="No audio file provided")
-
-    # Use OpenAI Whisper API for accurate Malay speech-to-text
-    whisper_api_key = os.getenv("OPENAI_API_KEY")
-    if not whisper_api_key:
-        raise HTTPException(status_code=500, detail="Whisper API not configured (set OPENAI_API_KEY)")
-
-    from order_engine import MENU
-
-    whisper_client = OpenAI(api_key=whisper_api_key)
-
-    # Build food vocabulary prompt to help Whisper recognize Malay food terms
-    menu_items_hint = ", ".join(list(MENU.keys())[:50])
-    whisper_prompt = f"Malay food order: {menu_items_hint}"
-
-    try:
-        import io
-        audio_content = await audio_file.read()
-
-        # Whisper API expects a file-like object with a name
-        audio_buffer = io.BytesIO(audio_content)
-        audio_buffer.name = "recording.webm"
-
-        transcript = whisper_client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_buffer,
-            language="ms",
-            prompt=whisper_prompt
-        )
-
-        transcribed_text = transcript.text.strip()
-        print(f"[Whisper] Transcribed: '{transcribed_text}'")
-
-        return {
-            "text": transcribed_text,
-            "table_number": table_number,
-            "source": "whisper"
-        }
-
-    except Exception as e:
-        print(f"[Whisper] Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Whisper transcription failed: {str(e)}")
-
 
 @app.get("/api/voice/greeting")
 async def voice_greeting():
