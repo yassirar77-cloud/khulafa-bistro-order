@@ -584,7 +584,8 @@ async function processMessage(text, alternatives) {
       // This prevents stale state if two requests overlap
       if (data.order) {
         data.order.forEach(serverItem => {
-          const existing = order.find(i => i.name.toLowerCase() === serverItem.name.toLowerCase());
+          const existing = order.find(i => i.name.toLowerCase() === serverItem.name.toLowerCase()
+            && JSON.stringify(i.modifiers || []) === JSON.stringify(serverItem.modifiers || []));
           if (existing) {
             existing.qty = serverItem.qty; // trust server qty
           } else {
@@ -602,7 +603,8 @@ async function processMessage(text, alternatives) {
       const orderItems = order.map(i => ({
         name: i.name,
         qty: i.qty || 1,
-        price: i.price || 0
+        price: i.price || 0,
+        modifiers: i.modifiers || []
       }));
       const orderTotal = orderItems.reduce((s, i) => s + i.price * i.qty, 0);
 
@@ -703,7 +705,10 @@ function cancelMode() {
     return;
   }
   inCancelMode = true;
-  const lines = order.map((item, i) => (i + 1) + '. ' + item.name + ' x' + (item.qty || 1));
+  const lines = order.map((item, i) => {
+    const modStr = (item.modifiers && item.modifiers.length) ? ' (' + item.modifiers.join(', ') + ')' : '';
+    return (i + 1) + '. ' + item.name + modStr + ' x' + (item.qty || 1);
+  });
   const msg = 'Order sekarang:\n' + lines.join('\n') + '\n\nNombor mana nak batalkan?';
   addAiMsg(msg);
   // Show clickable cancel buttons for each item
@@ -919,15 +924,17 @@ function showOrderCard(items, total) {
   document.querySelectorAll('.order-card').forEach(c => c.remove());
 
   const tv = total || items.reduce((s, i) => s + (i.price * (i.qty || 1)), 0);
-  const ih = items.map(i =>
-    '<div class="order-item">' +
-    '<div style="display:flex;align-items:center;gap:6px;">' +
+  const ih = items.map(i => {
+    const modStr = (i.modifiers && i.modifiers.length) ? '<span class="order-item-mods" style="font-size:0.85em;color:#888;margin-left:4px;">(' + esc(i.modifiers.join(', ')) + ')</span>' : '';
+    return '<div class="order-item">' +
+    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
     '<span class="order-item-qty">' + (i.qty || 1) + 'x</span>' +
     '<span class="order-item-name">' + esc(i.name) + '</span>' +
+    modStr +
     '</div>' +
     '<span class="order-item-price">RM' + ((i.price || 0) * (i.qty || 1)).toFixed(2) + '</span>' +
-    '</div>'
-  ).join('');
+    '</div>';
+  }).join('');
 
   const e = document.createElement('div');
   e.className = 'order-card';
