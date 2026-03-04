@@ -103,7 +103,13 @@ def transcribe_audio(audio_file_path):
                 "bandung, bandung ais, bandung panas, sirap ais, sirap panas, "
                 "barli ais, barli panas, air kosong, air mineral, cincau, longan, "
                 "tambah, kurang, pedas, manis, satu, dua, tiga, empat, lima, "
-                "enam, tujuh, lapan, sembilan, sepuluh, itu saja, terima kasih"
+                "enam, tujuh, lapan, sembilan, sepuluh, itu saja, terima kasih, "
+                "kurang manis, kurang ais, tak nak biji, tak nak sayur, tak nak sambal, "
+                "tak nak pedas, tambah telur, tambah sambal, kaw, kow, pekat, cair, "
+                "garing, lembut, panas, suam, besar, kecil, tabur, dinosaur, kosong, "
+                "tarik, double, extra, lebih, sikit, banyak, tanpa, pedas gila, crispy, "
+                "well done, setengah masak, tak nak bawang, tak nak cili, tak nak kuah, "
+                "kering, tak nak kacang, tak nak timun"
             )
         )
     print(f"[Whisper] Transcribed: {transcript.text}")
@@ -971,6 +977,7 @@ class VoiceOrderItem(BaseModel):
     name: str
     quantity: int
     price: float
+    modifiers: List[str] = []
 
 class VoiceSubmitOrder(BaseModel):
     table_number: str
@@ -1134,15 +1141,100 @@ FUZZY MATCHING RULES:
 
 MALAY NUMBER WORDS: satu=1, dua=2, tiga=3, empat=4, lima=5, enam=6, tujuh=7, lapan=8, sembilan=9, sepuluh=10
 
+CUSTOMER SPECIAL REQUESTS & MODIFIERS:
+Customers frequently add modifiers to their orders. You MUST capture these as "modifiers" in the JSON output.
+
+SWEETNESS MODIFIERS:
+- "kurang manis" = less sugar
+- "tak nak manis" / "tanpa gula" / "kosong" (for drinks) = no sugar
+- "manis" / "lebih manis" = extra sweet
+- "sikit manis" / "sikit je manis" = just a little sweet
+
+STRENGTH/THICKNESS MODIFIERS (drinks):
+- "kaw" / "kow" / "pekat" = strong/thick (extra concentrated)
+- "cair" / "ringan" = diluted/light/weak
+
+TEMPERATURE MODIFIERS:
+- "kurang ais" / "sikit ais" = less ice
+- "tak nak ais" / "tanpa ais" = no ice
+- "banyak ais" / "extra ice" = extra ice
+- "panas" / "hot" = hot
+- "suam" / "warm" = warm/lukewarm
+
+MILK MODIFIERS (for teh/kopi/milo/nescafe):
+- "tarik" = pulled with condensed milk (frothy)
+- "tabur" = powder sprinkled on top (for Milo/Nescafe)
+- "dinosaur" / "dino" = iced milo + extra milo powder on top
+
+SIZE MODIFIERS:
+- "besar" / "jumbo" / "large" = large size
+- "kecil" / "small" = small size
+
+FOOD EXCLUSIONS (tak nak / remove):
+- "tak nak sayur" = no vegetables
+- "tak nak biji" = no seeds/tapioca pearls
+- "tak nak timun" = no cucumber
+- "tak nak kacang" = no peanuts/beans
+- "tak nak sambal" = no sambal
+- "tak nak telur" = no egg
+- "tak nak bawang" = no onion
+- "tak nak cili" = no chili
+- "tak nak kuah" / "kering" = no gravy / dry
+- "tanpa ___" = without ___
+
+FOOD ADDITIONS (tambah / extra):
+- "tambah telur" = add egg
+- "tambah sambal" = extra sambal
+- "tambah sayur" = extra vegetables
+- "extra ___" / "lebih ___" = extra ___
+- "double" = double portion
+- "tambah cheese" / "tambah keju" = add cheese
+- "tambah daging" = add meat
+
+SPICINESS MODIFIERS:
+- "pedas" = spicy
+- "kurang pedas" = less spicy
+- "tak nak pedas" / "tak pedas" = not spicy
+- "extra pedas" / "pedas gila" = extra spicy
+
+COOKING PREFERENCES:
+- "garing" / "crispy" = crispy (for roti, ayam)
+- "lembut" = soft
+- "well done" / "masak betul" = well cooked
+- "setengah masak" = half cooked (for eggs)
+
+GENERAL MODIFIER PATTERNS:
+- "kurang ___" = less of something
+- "tak nak ___" / "tanpa ___" = without / remove something
+- "tambah ___" / "extra ___" / "lebih ___" = add more of something
+- "sikit ___" = a little bit of something
+- "banyak ___" = a lot of something
+
+IMPORTANT: Modifiers are words/phrases that describe HOW the customer wants the item prepared, NOT the item name itself. Do NOT include modifiers in the "matched_item" field. Only capture modifiers that are NOT already part of the menu item name.
+
 MENU:
 {menu_list_str}
 
 Return ONLY a JSON array of matched items. Each element:
-{{"matched_item": "exact menu item name", "quantity": number, "confidence": float 0-1}}
+{{"matched_item": "exact menu item name", "quantity": number, "confidence": float 0-1, "modifiers": ["modifier1", "modifier2"]}}
+
+If no modifiers, return empty array: "modifiers": []
+
+EXAMPLES:
+Input: "satu teh tarik kurang manis"
+Output: [{{"matched_item": "teh tarik", "quantity": 1, "confidence": 0.95, "modifiers": ["kurang manis"]}}]
+
+Input: "milo ais kaw satu, roti canai garing dua"
+Output: [{{"matched_item": "milo ais", "quantity": 1, "confidence": 0.95, "modifiers": ["kaw"]}}, {{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95, "modifiers": ["garing"]}}]
+
+Input: "nasi goreng tak nak pedas tambah telur"
+Output: [{{"matched_item": "nasi goreng biasa", "quantity": 1, "confidence": 0.9, "modifiers": ["tak nak pedas", "tambah telur"]}}]
+
+Input: "milo dinosaur satu"
+Output: [{{"matched_item": "milo ais", "quantity": 1, "confidence": 0.95, "modifiers": ["dinosaur"]}}]
 
 If multiple items are ordered, return multiple elements.
 If unclear but you can guess, make your best guess - do NOT return empty.
-Example: [{{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95}}]
 
 Customer said: "{speech}"{alt_section}
 Pick the most likely correct menu items from these alternatives."""
@@ -1185,9 +1277,11 @@ Pick the most likely correct menu items from these alternatives."""
             name = item.get("matched_item", "")
             qty = item.get("quantity", 1)
             confidence = item.get("confidence", 0)
+            modifiers = item.get("modifiers", [])
             if name:
                 qty_str = f" x{qty}" if qty > 1 else ""
-                extracted_items.append(f"{name}{qty_str} (confidence: {confidence})")
+                mod_str = f" [{', '.join(modifiers)}]" if modifiers else ""
+                extracted_items.append(f"{name}{qty_str}{mod_str} (confidence: {confidence})")
 
         items_summary = ", ".join(extracted_items) if extracted_items else "unclear"
 
@@ -1198,9 +1292,11 @@ STRICT RULES:
 - ONLY confirm what customer ordered and say "Ada lagi?"
 - Keep responses SHORT - max 1 sentence
 - Example: "Baiklah, mee goreng satu. Ada lagi?"
+- When an item has modifiers (e.g. kurang manis, kaw, garing), ALWAYS mention them in the reply
+- Example with modifiers: "Okay, satu Milo Ais kaw dan dua Roti Canai garing. Ada lagi?"
 - NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Nak tambah..."
 - NEVER mention any food item the customer did NOT order
-- The "reply" field must ONLY contain the ordered items + "Ada lagi?" — nothing else
+- The "reply" field must ONLY contain the ordered items (with modifiers) + "Ada lagi?" — nothing else
 
 The customer said: "{speech}"
 Our order extraction system detected these items: {items_summary}
@@ -1211,10 +1307,11 @@ MENU ITEMS AVAILABLE:
 TASK:
 - Match the extracted items to the closest menu item names
 - Confirm items in 1 short sentence + "Ada lagi?"
+- ALWAYS include modifiers in the reply (e.g. "kurang manis", "kaw", "garing", "tak nak pedas")
 - IMPORTANT: If the item exists in the menu list above, NEVER say it is unavailable
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
-{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "Baiklah, [items]. Ada lagi?"}}
+{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "Baiklah, [items with modifiers]. Ada lagi?"}}
 
 IMPORTANT:
 - "items" array = lowercase exact menu item names
@@ -1326,6 +1423,15 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
     while len(quantities) < len(items):
         quantities.append(1)
 
+    # Build modifiers lookup from DeepSeek result
+    deepseek_modifiers = {}
+    if deepseek_result:
+        for ds_item in deepseek_result:
+            ds_name = ds_item.get("matched_item", "").lower().strip()
+            ds_mods = ds_item.get("modifiers", [])
+            if ds_name and ds_mods:
+                deepseek_modifiers[ds_name] = ds_mods
+
     # Look up audio and build new_items with quantities
     audio_matches = []
     new_items = []
@@ -1333,12 +1439,14 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
     for idx, item_name in enumerate(items):
         item_lower = item_name.lower().strip()
         qty = quantities[idx] if idx < len(quantities) else 1
+        # Get modifiers from DeepSeek for this item
+        item_modifiers = deepseek_modifiers.get(item_lower, [])
         if item_lower in MENU:
             # Exact match
             menu_item = MENU[item_lower]
             if menu_item['audio_id']:
                 audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-            new_items.append({"name": item_lower.title(), "qty": qty, "price": menu_item["price"]})
+            new_items.append({"name": item_lower.title(), "qty": qty, "price": menu_item["price"], "modifiers": item_modifiers})
         else:
             # Fuzzy match fallback
             fuzzy_matches = fuzzy_match_menu_item(item_lower)
@@ -1346,7 +1454,7 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
                 menu_item = MENU[matched_key]
                 if menu_item['audio_id']:
                     audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-                new_items.append({"name": matched_key.title(), "qty": qty, "price": menu_item["price"]})
+                new_items.append({"name": matched_key.title(), "qty": qty, "price": menu_item["price"], "modifiers": item_modifiers})
             if fuzzy_matches:
                 print(f"[FuzzyMatch] '{item_lower}' -> {fuzzy_matches}")
             else:
@@ -1419,16 +1527,23 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
             updated_order.append(add_item)
 
     # Add new items for ordering actions
+    # Items with different modifiers are treated as separate entries
+    def _find_existing(order_list, new_item):
+        for i in order_list:
+            if i["name"].lower() == new_item["name"].lower() and i.get("modifiers", []) == new_item.get("modifiers", []):
+                return i
+        return None
+
     if action == "add_items":
         for ni in new_items:
-            existing = next((i for i in updated_order if i["name"].lower() == ni["name"].lower()), None)
+            existing = _find_existing(updated_order, ni)
             if existing:
                 existing["qty"] += ni["qty"]
             else:
                 updated_order.append(ni)
     elif action not in ("cancel_all", "cancel_item", "cancel_by_index", "change_item"):
         for ni in new_items:
-            existing = next((i for i in updated_order if i["name"].lower() == ni["name"].lower()), None)
+            existing = _find_existing(updated_order, ni)
             if existing:
                 existing["qty"] += ni["qty"]
             else:
@@ -1560,17 +1675,21 @@ async def submit_voice_order(request: Request):
         menu_item = cursor.fetchone()
         menu_item_id = menu_item['id'] if menu_item else 0
         item_price = menu_item['price'] if menu_item else i.get('price', 0)
+        item_note = ', '.join(i.get('modifiers', [])) if i.get('modifiers') else None
 
         cursor.execute('''
-            INSERT INTO order_items (order_id, menu_item_id, quantity, price)
-            VALUES (?, ?, ?, ?)
-        ''', (order_id, menu_item_id, i.get('qty', 1), item_price))
+            INSERT INTO order_items (order_id, menu_item_id, quantity, price, note)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (order_id, menu_item_id, i.get('qty', 1), item_price, item_note))
 
     conn.commit()
     conn.close()
 
     # Build Telegram message
-    items_text = "\n".join([f"  • {i['name']} x{i.get('qty', 1)} - RM{i.get('price', 0) * i.get('qty', 1):.2f}" for i in items])
+    def _format_item_line(i):
+        mod_str = f" ({', '.join(i['modifiers'])})" if i.get('modifiers') else ""
+        return f"  • {i['name']}{mod_str} x{i.get('qty', 1)} - RM{i.get('price', 0) * i.get('qty', 1):.2f}"
+    items_text = "\n".join([_format_item_line(i) for i in items])
 
     message = (
         f"🎤 VOICE ORDER - MEJA {table}\n"
@@ -1639,11 +1758,12 @@ async def voice_submit_order(req: VoiceSubmitOrder):
         menu_item = cursor.fetchone()
         menu_item_id = menu_item['id'] if menu_item else 0
         item_price = menu_item['price'] if menu_item else item.price
+        item_note = ', '.join(item.modifiers) if item.modifiers else None
 
         cursor.execute('''
-            INSERT INTO order_items (order_id, menu_item_id, quantity, price)
-            VALUES (?, ?, ?, ?)
-        ''', (order_id, menu_item_id, item.quantity, item_price))
+            INSERT INTO order_items (order_id, menu_item_id, quantity, price, note)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (order_id, menu_item_id, item.quantity, item_price, item_note))
 
     conn.commit()
     conn.close()
@@ -1661,7 +1781,10 @@ def send_voice_order_telegram(order_id, table_number, items, total):
     items_text = ""
     for item in items:
         line_total = item.price * item.quantity
-        items_text += f"  • {item.name} x{item.quantity} - RM{line_total:.2f}\n"
+        mod_str = ""
+        if hasattr(item, 'modifiers') and item.modifiers:
+            mod_str = f" ({', '.join(item.modifiers)})"
+        items_text += f"  • {item.name}{mod_str} x{item.quantity} - RM{line_total:.2f}\n"
 
     message = (
         f"🔔 TABLE {table_number} - NEW ORDER\n"
