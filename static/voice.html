@@ -220,6 +220,7 @@ let isPlaying = false;
 let isProcessing = false;
 let currentAudio = null;
 let order = [];          // [{name, qty, price}, ...]
+let pendingTranscript = null; // holds speech captured during processing
 let micRetryCount = 0;
 const MIC_MAX_RETRIES = 3;
 
@@ -415,6 +416,13 @@ async function restartListening() {
 // ===== PROCESS MESSAGE =====
 async function processMessage(text, alternatives) {
   if (!text || text.length < 2) return;
+
+  // If already processing, save transcript for after
+  if (isProcessing) {
+    pendingTranscript = { text, alternatives };
+    return;
+  }
+
   isProcessing = true;
   setMicState('processing');
   setStatus('Memproses...');
@@ -461,7 +469,18 @@ async function processMessage(text, alternatives) {
 
     // Handle add_items — update order + show order card
     if (data.action === 'add_items' && data.new_items && data.new_items.length) {
-      order = data.order || order;
+      // Always merge into current order instead of replacing
+      // This prevents stale state if two requests overlap
+      if (data.order) {
+        data.order.forEach(serverItem => {
+          const existing = order.find(i => i.name.toLowerCase() === serverItem.name.toLowerCase());
+          if (existing) {
+            existing.qty = serverItem.qty; // trust server qty
+          } else {
+            order.push(serverItem);
+          }
+        });
+      }
       showOrderCard(order, data.total);
     }
 
@@ -537,6 +556,15 @@ async function processMessage(text, alternatives) {
   isProcessing = false;
   setMicState('idle');
   setStatus('Bersedia');
+
+  // Process any speech that came in while we were busy
+  if (pendingTranscript) {
+    const queued = pendingTranscript;
+    pendingTranscript = null;
+    processMessage(queued.text, queued.alternatives);
+    return;
+  }
+
   setTimeout(() => { if (!shouldListen && !isProcessing && !isPlaying) resumeMic(); }, 800);
 }
 
@@ -548,10 +576,16 @@ async function confirmOrder() {
 }
 
 function addMore() {
+  // Tambah button — just resume mic, keep existing order intact
   document.querySelectorAll('.order-card').forEach(c => c.remove());
   addAiMsg('Okay, nak tambah apa lagi?');
   isProcessing = false;
+  showOrderCard(order, calculateTotal(order)); // re-render with current order
   setTimeout(() => resumeMic(), 500);
+}
+
+function calculateTotal(items) {
+  return items.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0);
 }
 
 function showOrderSent() {
