@@ -1022,8 +1022,8 @@ async def voice_chat(request: Request):
     NON_ORDER_PATTERNS = [
         # Confirmations / end-of-order
         r"\b(tu\s*je|tu\s*jer|itu\s*je|cukup|dah|sekian|confirm|settle|setel|hantar)\b",
-        # Cancel / remove
-        r"\b(cancel|batal|tak\s*jadi|tak\s*nak|remove|buang|padam)\b",
+        # Cancel / remove / change
+        r"\b(cancel|batal|tak\s*jadi|tak\s*nak|remove|buang|padam|tukar|ubah|salah|mula\s*balik|start\s*over)\b",
         # Greetings
         r"\b(hi|hello|helo|hey|assalamualaikum|salam|selamat)\b",
         # Questions about menu / recommendations
@@ -1224,6 +1224,10 @@ IMPORTANT:
 
     else:
         # Non-ordering: greetings, confirmations, cancel etc go straight to Qwen
+        order_list_str = ""
+        if current_order:
+            order_list_str = ", ".join([f"{i.get('name','')} x{i.get('qty',1)}" for i in current_order])
+
         qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
 
 STRICT RULES:
@@ -1241,9 +1245,21 @@ The customer said: "{speech}"
 Handle this naturally:
 - Greetings: "Hai! Nak order apa?"
 - Confirmations (tu je/cukup/dah/hantar/confirm/settle/setel/sekian): "Terima kasih! Pesanan sudah dihantar."
-- Cancel/remove: acknowledge briefly
 - Questions: answer briefly
 - If ordering food, match to menu items
+
+CANCEL/CHANGE HANDLING:
+- If customer says "cancel", "batalkan", "tak nak", "buang", "remove" WITHOUT specifying an item:
+  - If order is empty: {{"items": [], "quantities": [], "action": "cancel_request", "reply": "Tiada item untuk dibatalkan."}}
+  - If order has items: {{"items": [], "quantities": [], "action": "cancel_request", "reply": "Nombor mana nak batalkan?"}}
+- If customer says "cancel [item]", "buang [item]", "batalkan [item]", "tak nak [item]":
+  {{"items": ["item name to cancel"], "quantities": [1], "action": "cancel_item", "reply": "Okay, [item] dah dibuang. Ada lagi?"}}
+- If customer says "tukar [old] kepada [new]", "change [old] to [new]", "ubah [old] jadi [new]":
+  {{"items": ["old item", "new item"], "quantities": [1, 1], "action": "change_item", "reply": "Okay, [old] ditukar kepada [new]. Ada lagi?"}}
+- If customer says "cancel semua", "buang semua", "mula balik", "start over":
+  {{"items": [], "quantities": [], "action": "cancel_all", "reply": "Semua dah dibuang. Nak order apa?"}}
+- If customer says a number like "nombor 1", "nombor 2", "yang pertama", "yang kedua":
+  {{"items": ["nombor X"], "quantities": [1], "action": "cancel_by_index", "reply": "Okay, [item] dah dibuang. Ada lagi?"}}
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
 
@@ -1253,8 +1269,8 @@ When customer orders items:
 When customer confirms order:
 {{"items": [], "quantities": [], "action": "confirm", "reply": "Terima kasih! Pesanan sudah dihantar."}}
 
-When customer cancels:
-{{"items": [], "quantities": [], "action": "cancel", "reply": "Okay, pesanan dibatalkan."}}
+When customer cancels (general):
+{{"items": [], "quantities": [], "action": "cancel_request", "reply": "Nombor mana nak batalkan?"}}
 
 When greeting or unclear:
 {{"items": [], "quantities": [], "action": "greeting", "reply": "your response"}}
@@ -1342,6 +1358,38 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
     if action == "confirm":
         action = "confirm_order"
 
+    # ── Handle cancel/change actions ──
+    remove_item = None
+    add_item = None
+    cancel_index = None
+
+    if action == "cancel_item" and items:
+        # Remove specific item from order
+        remove_item = items[0].lower().strip()
+
+    elif action == "change_item" and len(items) >= 2:
+        # Swap old item for new item
+        remove_item = items[0].lower().strip()
+        add_item_name = items[1].lower().strip()
+        # Look up the new item in menu
+        if add_item_name in MENU:
+            menu_item = MENU[add_item_name]
+            add_item = {"name": add_item_name.title(), "qty": 1, "price": menu_item["price"]}
+
+    elif action == "cancel_by_index" and items:
+        # Parse index from "nombor X" pattern
+        idx_str = items[0].lower().strip()
+        idx_match = re.search(r'(\d+)', idx_str)
+        if idx_match:
+            cancel_index = int(idx_match.group(1)) - 1  # 0-based
+        else:
+            # Try Malay ordinal words
+            malay_ordinals = {"pertama": 0, "kedua": 1, "ketiga": 2, "keempat": 3, "kelima": 4}
+            for word, idx in malay_ordinals.items():
+                if word in idx_str:
+                    cancel_index = idx
+                    break
+
     # Add "ada lagi?" audio for add action
     if action == "add_items" and new_items:
         audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
@@ -1352,19 +1400,46 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
 
     # Update order
     updated_order = list(current_order)
-    for ni in new_items:
-        existing = next((i for i in updated_order if i["name"].lower() == ni["name"].lower()), None)
-        if existing:
-            existing["qty"] += ni["qty"]
+
+    # Handle cancel actions on the order
+    if action == "cancel_all":
+        updated_order = []
+    elif action == "cancel_item" and remove_item:
+        updated_order = [i for i in updated_order if i["name"].lower() != remove_item]
+    elif action == "cancel_by_index" and cancel_index is not None:
+        if 0 <= cancel_index < len(updated_order):
+            removed = updated_order.pop(cancel_index)
+            reply = reply.replace("[item]", removed["name"])
         else:
-            updated_order.append(ni)
+            reply = "Nombor tu tiada dalam senarai. Cuba lagi?"
+            action = "cancel_request"
+    elif action == "change_item" and remove_item:
+        updated_order = [i for i in updated_order if i["name"].lower() != remove_item]
+        if add_item:
+            updated_order.append(add_item)
+
+    # Add new items for ordering actions
+    if action == "add_items":
+        for ni in new_items:
+            existing = next((i for i in updated_order if i["name"].lower() == ni["name"].lower()), None)
+            if existing:
+                existing["qty"] += ni["qty"]
+            else:
+                updated_order.append(ni)
+    elif action not in ("cancel_all", "cancel_item", "cancel_by_index", "change_item"):
+        for ni in new_items:
+            existing = next((i for i in updated_order if i["name"].lower() == ni["name"].lower()), None)
+            if existing:
+                existing["qty"] += ni["qty"]
+            else:
+                updated_order.append(ni)
 
     total = sum(i["price"] * i["qty"] for i in updated_order)
 
     # Build extracted_items list for frontend upsell checking
     extracted_items = [ni["name"].lower() for ni in new_items]
 
-    return {
+    result = {
         "text": reply,
         "audio_matches": audio_matches,
         "has_audio": len(audio_matches) > 0,
@@ -1375,6 +1450,13 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         "total": total,
         "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
     }
+    if remove_item:
+        result["remove_item"] = remove_item
+    if add_item:
+        result["add_item"] = add_item
+    if cancel_index is not None:
+        result["cancel_index"] = cancel_index
+    return result
 
 @app.post("/api/voice/transcribe")
 async def voice_transcribe(request: Request):

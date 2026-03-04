@@ -105,6 +105,8 @@ html,body { height:100%; background:var(--dark); font-family:'Segoe UI',system-u
 .btn-confirm { flex:1; padding:12px; background:linear-gradient(135deg,var(--gold) 0%,var(--gold-dark) 100%); color:var(--dark); border:none; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; transition:opacity 0.15s,transform 0.15s; }
 .btn-confirm:active { opacity:0.85; transform:scale(0.97); }
 .btn-add { padding:12px 16px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.7); border:1px solid rgba(255,255,255,0.15); border-radius:12px; font-size:15px; cursor:pointer; }
+.btn-cancel-item { flex:1; padding:12px; background:linear-gradient(135deg,#E53935 0%,#B71C1C 100%); color:#fff; border:none; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; transition:opacity 0.15s,transform 0.15s; }
+.btn-cancel-item:active { opacity:0.85; transform:scale(0.97); }
 
 /* DISAMBIGUATION BUTTONS */
 .disambig-wrap { display:flex; flex-direction:column; gap:6px; padding:4px 0; }
@@ -223,6 +225,7 @@ let order = [];          // [{name, qty, price}, ...]
 let pendingTranscript = null; // holds speech captured during processing
 let micRetryCount = 0;
 const MIC_MAX_RETRIES = 3;
+let inCancelMode = false; // true when waiting for cancel selection
 
 document.getElementById('splashTable').textContent = 'Table ' + TABLE;
 document.getElementById('tableBadge').textContent = 'Table ' + TABLE;
@@ -287,7 +290,10 @@ function initSpeechRecognition() {
       'teh tarik | teh o | kopi tarik | milo | milo dinosaur | ' +
       'sirap bandung | sirap limau | barli | lychee | ' +
       'satu | dua | tiga | empat | lima | ' +
-      'itu saja | saja | confirm | hantar pesanan | ada lagi | cancel ;';
+      'itu saja | saja | confirm | hantar pesanan | ada lagi | ' +
+      'cancel | batalkan | tak nak | tukar | ubah | salah | buang | remove | ' +
+      'cancel semua | buang semua | mula balik | start over | ' +
+      'nombor satu | nombor dua | nombor tiga | nombor empat | nombor lima ;';
     const speechRecognitionList = new SpeechGrammarList();
     speechRecognitionList.addFromString(grammar, 1);
     recognition.grammars = speechRecognitionList;
@@ -467,6 +473,111 @@ async function processMessage(text, alternatives) {
       return;
     }
 
+    // Handle cancel/change actions
+    if (data.action === 'cancel_request') {
+      if (order.length === 0) {
+        // Empty cart — nothing to cancel
+      } else {
+        cancelMode();
+      }
+      if (data.has_audio && data.audio_matches && data.audio_matches.length) {
+        isPlaying = true;
+        setStatus('Aisha bercakap...');
+        await playAudioSequence(data.audio_matches);
+        isPlaying = false;
+      }
+      isProcessing = false;
+      setMicState('idle');
+      setStatus('Bersedia');
+      return;
+    }
+
+    if (data.action === 'cancel_all') {
+      order = [];
+      inCancelMode = false;
+      const cb = document.getElementById('cancelButtons');
+      if (cb) cb.remove();
+      document.querySelectorAll('.order-card').forEach(c => c.remove());
+      if (data.has_audio && data.audio_matches && data.audio_matches.length) {
+        isPlaying = true;
+        setStatus('Aisha bercakap...');
+        await playAudioSequence(data.audio_matches);
+        isPlaying = false;
+      }
+      isProcessing = false;
+      setMicState('idle');
+      setStatus('Bersedia');
+      setTimeout(() => resumeMic(), 800);
+      return;
+    }
+
+    if (data.action === 'cancel_item') {
+      // Server already removed item from order
+      order = data.order || order;
+      inCancelMode = false;
+      const cb = document.getElementById('cancelButtons');
+      if (cb) cb.remove();
+      document.querySelectorAll('.order-card').forEach(c => c.remove());
+      if (order.length > 0) {
+        showOrderCard(order, data.total);
+      }
+      if (data.has_audio && data.audio_matches && data.audio_matches.length) {
+        isPlaying = true;
+        setStatus('Aisha bercakap...');
+        await playAudioSequence(data.audio_matches);
+        isPlaying = false;
+      }
+      isProcessing = false;
+      setMicState('idle');
+      setStatus('Bersedia');
+      setTimeout(() => resumeMic(), 800);
+      return;
+    }
+
+    if (data.action === 'cancel_by_index') {
+      order = data.order || order;
+      inCancelMode = false;
+      const cb = document.getElementById('cancelButtons');
+      if (cb) cb.remove();
+      document.querySelectorAll('.order-card').forEach(c => c.remove());
+      if (order.length > 0) {
+        showOrderCard(order, data.total);
+      }
+      if (data.has_audio && data.audio_matches && data.audio_matches.length) {
+        isPlaying = true;
+        setStatus('Aisha bercakap...');
+        await playAudioSequence(data.audio_matches);
+        isPlaying = false;
+      }
+      isProcessing = false;
+      setMicState('idle');
+      setStatus('Bersedia');
+      setTimeout(() => resumeMic(), 800);
+      return;
+    }
+
+    if (data.action === 'change_item') {
+      order = data.order || order;
+      inCancelMode = false;
+      const cb = document.getElementById('cancelButtons');
+      if (cb) cb.remove();
+      document.querySelectorAll('.order-card').forEach(c => c.remove());
+      if (order.length > 0) {
+        showOrderCard(order, data.total);
+      }
+      if (data.has_audio && data.audio_matches && data.audio_matches.length) {
+        isPlaying = true;
+        setStatus('Aisha bercakap...');
+        await playAudioSequence(data.audio_matches);
+        isPlaying = false;
+      }
+      isProcessing = false;
+      setMicState('idle');
+      setStatus('Bersedia');
+      setTimeout(() => resumeMic(), 800);
+      return;
+    }
+
     // Handle add_items — update order + show order card
     if (data.action === 'add_items' && data.new_items && data.new_items.length) {
       // Always merge into current order instead of replacing
@@ -520,6 +631,7 @@ async function processMessage(text, alternatives) {
             isProcessing = false;
             isPlaying = false;
             shouldListen = false;
+            inCancelMode = false;
             // Reset to splash/greeting screen
             const splash = document.getElementById('splash');
             splash.style.display = '';
@@ -581,6 +693,88 @@ function addMore() {
   addAiMsg('Okay, nak tambah apa lagi?');
   isProcessing = false;
   showOrderCard(order, calculateTotal(order)); // re-render with current order
+  setTimeout(() => resumeMic(), 500);
+}
+
+function cancelMode() {
+  if (inCancelMode) return; // prevent nesting
+  if (order.length === 0) {
+    addAiMsg('Tiada item untuk dibatalkan.');
+    return;
+  }
+  inCancelMode = true;
+  const lines = order.map((item, i) => (i + 1) + '. ' + item.name + ' x' + (item.qty || 1));
+  const msg = 'Order sekarang:\n' + lines.join('\n') + '\n\nNombor mana nak batalkan?';
+  addAiMsg(msg);
+  // Show clickable cancel buttons for each item
+  showCancelButtons();
+  setTimeout(() => resumeMic(), 500);
+}
+
+function showCancelButtons() {
+  const chatArea = document.getElementById('chatArea');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  div.id = 'cancelButtons';
+  div.style.maxWidth = '92%';
+
+  const ic = document.createElement('div');
+  ic.className = 'msg-avatar';
+  ic.textContent = '\uD83D\uDC69';
+  div.appendChild(ic);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'disambig-wrap';
+
+  order.forEach((item, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'disambig-btn';
+    btn.style.borderColor = 'rgba(229,57,53,0.4)';
+    btn.style.background = 'rgba(229,57,53,0.08)';
+    btn.innerHTML = (idx + 1) + '. ' + esc(item.name) + ' <span class="disambig-price" style="color:#E53935;">Buang</span>';
+    btn.addEventListener('click', () => { cancelItemByIndex(idx); });
+    wrap.appendChild(btn);
+  });
+
+  // Cancel all button
+  const btnAll = document.createElement('button');
+  btnAll.className = 'disambig-btn';
+  btnAll.style.borderColor = 'rgba(229,57,53,0.6)';
+  btnAll.style.background = 'rgba(229,57,53,0.15)';
+  btnAll.innerHTML = 'Batalkan Semua';
+  btnAll.addEventListener('click', () => { cancelAll(); });
+  wrap.appendChild(btnAll);
+
+  div.appendChild(wrap);
+  chatArea.appendChild(div);
+  scrollBottom();
+}
+
+function cancelItemByIndex(idx) {
+  if (idx < 0 || idx >= order.length) return;
+  const removed = order.splice(idx, 1)[0];
+  inCancelMode = false;
+  // Remove cancel buttons
+  const cb = document.getElementById('cancelButtons');
+  if (cb) cb.remove();
+  document.querySelectorAll('.order-card').forEach(c => c.remove());
+
+  if (order.length === 0) {
+    addAiMsg('Okay, ' + removed.name + ' dah dibuang. Nak order apa?');
+  } else {
+    addAiMsg('Okay, ' + removed.name + ' dah dibuang. Ada lagi?');
+    showOrderCard(order, calculateTotal(order));
+  }
+  setTimeout(() => resumeMic(), 500);
+}
+
+function cancelAll() {
+  order = [];
+  inCancelMode = false;
+  const cb = document.getElementById('cancelButtons');
+  if (cb) cb.remove();
+  document.querySelectorAll('.order-card').forEach(c => c.remove());
+  addAiMsg('Semua dah dibuang. Nak order apa?');
   setTimeout(() => resumeMic(), 500);
 }
 
@@ -746,6 +940,9 @@ function showOrderCard(items, total) {
     '<div class="order-actions">' +
     '<button class="btn-add" onclick="addMore()">+ Tambah</button>' +
     '<button class="btn-confirm" onclick="confirmOrder()">Confirm Order ✓</button>' +
+    '</div>' +
+    '<div class="order-actions" style="margin-top:6px;">' +
+    '<button class="btn-cancel-item" onclick="cancelMode()">🗑️ Batalkan Item</button>' +
     '</div>';
   document.getElementById('chatArea').appendChild(e);
   scrollBottom();
