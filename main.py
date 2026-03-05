@@ -18,6 +18,7 @@ from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
 from openai import OpenAI
+from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
 
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
@@ -122,20 +123,19 @@ def _build_menu_list() -> str:
         lines.append(f"- {name} (RM{item['price']:.2f})")
     return "\n".join(lines)
 
-AISHA_SYSTEM_PROMPT = f"""You are Aisha, the virtual waitress at Khulafa Bistro. Your role is strictly to take orders.
+AISHA_SYSTEM_PROMPT = f"""You are Aisha, the virtual waitress at Khulafa Bistro. Your role is to take orders and suggest upgrades.
 
-STRICT RULES:
-1. NEVER recommend or suggest menu items on your own
-2. ONLY confirm what customer ordered and say "Ada lagi?"
-3. Keep responses SHORT - max 1 sentence
-4. Example: "Baiklah, mee goreng satu. Ada lagi?"
-5. NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Mahu try...", "Nak tambah..."
-6. NEVER list menu categories or suggest promotions
-7. When the customer confirms the order ("tu je" / "cukup" / "dah" / "hantar" / "confirm" / "settle" / "setel" / "sekian"), reply with ONLY: CONFIRM_ORDER
-8. Understand common Malay speech patterns, slang, and misspellings
-9. CRITICAL: All mee goreng, maggi goreng, bihun, kuey teow, and indomee items ARE on the menu. NEVER say they are unavailable.
-10. NEVER mention any menu item that the customer did NOT order — not as a suggestion, not as an example, not at all.
-11. The "reply" field MUST only contain: confirmation of ordered items + "Ada lagi?" — nothing else.
+RULES:
+1. Confirm what customer ordered
+2. Keep responses SHORT - max 2 sentences
+3. Example: "Baiklah, mee goreng satu! Nak try Mee Goreng Seafood? Lagi sedap!"
+4. NEVER say "Kami ada...", "Boleh cuba..."
+5. NEVER list menu categories or suggest promotions
+6. When the customer confirms the order ("tu je" / "cukup" / "dah" / "hantar" / "confirm" / "settle" / "setel" / "sekian"), reply with ONLY: CONFIRM_ORDER
+7. Understand common Malay speech patterns, slang, and misspellings
+8. CRITICAL: All mee goreng, maggi goreng, bihun, kuey teow, and indomee items ARE on the menu. NEVER say they are unavailable.
+9. If customer says "tak nak" / "no" to upsell, accept immediately: "Okay! Ada lagi?"
+10. Only suggest upsells that are provided in the UPSELL context — never make up suggestions.
 
 MENU ITEMS:
 {_build_menu_list()}
@@ -143,7 +143,7 @@ MENU ITEMS:
 RESPONSE FORMAT — Always respond in this EXACT JSON format, nothing else:
 
 When customer orders items:
-{{"items": ["roti canai", "maggi goreng"], "action": "add_items", "reply": "Roti Canai dan Maggi Goreng. Ada lagi?"}}
+{{"items": ["roti canai", "maggi goreng"], "action": "add_items", "reply": "Roti Canai dan Maggi Goreng! Nak try Maggi Goreng Kambing? Lagi power!"}}
 
 When customer confirms the order:
 {{"items": [], "action": "confirm_order", "reply": "Terima kasih! Pesanan sudah dihantar."}}
@@ -157,26 +157,17 @@ IMPORTANT:
 - Always respond with valid JSON only — no extra text before or after"""
 
 
-# Recommendation/upsell phrases to strip from Aisha replies
+# Unwanted generic recommendation phrases to strip (NOT upsell suggestions)
 _RECOMMENDATION_PATTERNS = [
-    r"cuba\s+juga",
-    r"mungkin\s+nak\s+try",
     r"kami\s+ada",
-    r"nak\s+tambah",
-    r"boleh\s+cuba",
-    r"mahu\s+try",
-    r"ingin\s+mencuba",
-    r"try\s+juga",
-    r"recommend",
-    r"syorkan",
-    r"cadangkan",
     r"promosi",
     r"special\s+hari\s+ini",
     r"menu\s+hari\s+ini",
 ]
 
 def _strip_recommendations(reply: str) -> str:
-    """Remove any recommendation sentences from Aisha's reply."""
+    """Remove unwanted generic recommendation sentences from Aisha's reply.
+    Preserves intentional upsell suggestions (nak try, sedap jugak, lagi best)."""
     import re
     sentences = re.split(r'(?<=[.?!])\s+', reply.strip())
     clean = []
@@ -1269,7 +1260,28 @@ Pick the most likely correct menu items from these alternatives."""
                 print(f"[DeepSeek] Error: {e} - falling back to Qwen-only")
                 deepseek_result = None
 
-    # ── STEP 2: Qwen Max Conversation Response ──
+    # ── STEP 2: Look up upsell suggestions for extracted items ──
+    upsell_context = ""
+    upsell_suggestions = []
+    if deepseek_result and is_ordering:
+        upsell_engine = get_upsell_engine()
+        for ds_item in deepseek_result:
+            item_name = ds_item.get("matched_item", "").lower().strip()
+            if item_name:
+                suggestion = upsell_engine.get_upsell(item_name)
+                if suggestion:
+                    upsell_suggestions.append(suggestion)
+
+        if upsell_suggestions:
+            upsell_lines = []
+            for s in upsell_suggestions:
+                upsell_lines.append(
+                    f"- {s['original'].title()} (RM{s['original_price']:.2f}) → "
+                    f"SUGGEST: {s['upsell_display']} (RM{s['upsell_price']:.2f})"
+                )
+            upsell_context = "\n".join(upsell_lines)
+
+    # ── STEP 3: Qwen Max Conversation Response ──
     if deepseek_result and is_ordering:
         # Build a structured prompt for Qwen using DeepSeek's extraction
         extracted_items = []
@@ -1285,18 +1297,32 @@ Pick the most likely correct menu items from these alternatives."""
 
         items_summary = ", ".join(extracted_items) if extracted_items else "unclear"
 
+        # Build upsell instruction block for the prompt
+        upsell_instruction = ""
+        if upsell_context:
+            upsell_instruction = f"""
+
+UPSELL RECOMMENDATIONS (IMPORTANT — you MUST include ONE upsell in your reply):
+{upsell_context}
+
+After confirming the customer's order, ALWAYS suggest ONE upgrade from the list above.
+Use casual mamak Malay style: "sedap jugak!", "nak try?", "lagi best!"
+Example: Customer orders Maggi Goreng → "Maggi Goreng satu! Nak try Maggi Goreng Kambing? Lagi power!"
+- Confirm order FIRST, then add upsell suggestion
+- Only ONE upsell suggestion per response
+- Keep it natural and friendly"""
+
         qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
 
-STRICT RULES:
-- NEVER recommend or suggest menu items on your own
-- ONLY confirm what customer ordered and say "Ada lagi?"
-- Keep responses SHORT - max 1 sentence
-- Example: "Baiklah, mee goreng satu. Ada lagi?"
+RULES:
+- Confirm what customer ordered first
+- Keep responses SHORT - max 2 sentences
 - When an item has modifiers (e.g. kurang manis, kaw, garing), ALWAYS mention them in the reply
 - Example with modifiers: "Okay, satu Milo Ais kaw dan dua Roti Canai garing. Ada lagi?"
-- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Nak tambah..."
-- NEVER mention any food item the customer did NOT order
-- The "reply" field must ONLY contain the ordered items (with modifiers) + "Ada lagi?" — nothing else
+- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba..."
+- NEVER list menu categories or suggest promotions
+- IMPORTANT: If the item exists in the menu list below, NEVER say it is unavailable
+{upsell_instruction}
 
 The customer said: "{speech}"
 Our order extraction system detected these items: {items_summary}
@@ -1306,15 +1332,14 @@ MENU ITEMS AVAILABLE:
 
 TASK:
 - Match the extracted items to the closest menu item names
-- Confirm items in 1 short sentence + "Ada lagi?"
+- Confirm items then {"include the upsell suggestion" if upsell_context else "say 'Ada lagi?'"}
 - ALWAYS include modifiers in the reply (e.g. "kurang manis", "kaw", "garing", "tak nak pedas")
-- IMPORTANT: If the item exists in the menu list above, NEVER say it is unavailable
 
 RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
-{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "Baiklah, [items with modifiers]. Ada lagi?"}}
+{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "Baiklah, [items]. Nak try [upsell]? Lagi sedap!"}}
 
 IMPORTANT:
-- "items" array = lowercase exact menu item names
+- "items" array = lowercase exact menu item names (only what customer ordered, NOT the upsell)
 - "quantities" array = quantity for each item (same order as items array)
 - "action" must be "add"
 - Always respond with valid JSON only"""
@@ -1554,10 +1579,21 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
     # Build extracted_items list for frontend upsell checking
     extracted_items = [ni["name"].lower() for ni in new_items]
 
+    # Generate ElevenLabs TTS audio for the upsell part of the reply
+    upsell_audio_base64 = None
+    if upsell_suggestions and action == "add_items":
+        try:
+            audio_bytes = await generate_upsell_audio(reply)
+            if audio_bytes:
+                import base64
+                upsell_audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        except Exception as e:
+            print(f"[UpsellTTS] Error generating audio: {e}")
+
     result = {
         "text": reply,
         "audio_matches": audio_matches,
-        "has_audio": len(audio_matches) > 0,
+        "has_audio": len(audio_matches) > 0 or upsell_audio_base64 is not None,
         "action": action,
         "new_items": new_items,
         "extracted_items": extracted_items,
@@ -1565,6 +1601,13 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         "total": total,
         "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
     }
+    if upsell_suggestions:
+        result["upsell"] = {
+            "suggestions": upsell_suggestions,
+            "has_upsell": True,
+        }
+    if upsell_audio_base64:
+        result["upsell_audio"] = upsell_audio_base64
     if remove_item:
         result["remove_item"] = remove_item
     if add_item:
@@ -1804,8 +1847,6 @@ def send_voice_order_telegram(order_id, table_number, items, total):
 
 
 # ========== Aisha Upsell Engine API ==========
-
-from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
 
 @app.get("/api/upsell/suggest")
 async def upsell_suggest(item: str):
