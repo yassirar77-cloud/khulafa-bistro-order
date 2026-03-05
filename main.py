@@ -1803,6 +1803,90 @@ def send_voice_order_telegram(order_id, table_number, items, total):
         send_message(OWNER_CHAT_ID, message)
 
 
+# ========== Aisha Upsell Engine API ==========
+
+from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
+
+@app.get("/api/upsell/suggest")
+async def upsell_suggest(item: str):
+    """Get upsell suggestion for an ordered item."""
+    engine = get_upsell_engine()
+    suggestion = engine.get_upsell(item.strip().lower())
+    if suggestion:
+        return {"has_upsell": True, **suggestion}
+    return {"has_upsell": False, "item": item}
+
+@app.get("/api/upsell/options")
+async def upsell_options(item: str):
+    """Get ALL upsell options for an item (for UI display)."""
+    engine = get_upsell_engine()
+    options = engine.get_all_upsells(item.strip().lower())
+    return {"item": item, "options": options, "count": len(options)}
+
+@app.post("/api/upsell/accept")
+async def upsell_accept(request: Request):
+    """Customer accepted upsell — return replacement item."""
+    body = await request.json()
+    original = body.get("original_item", "")
+    upsell = body.get("upsell_item", "")
+    engine = get_upsell_engine()
+    result = engine.accept_upsell(original, upsell)
+    if result:
+        return {"accepted": True, **result}
+    return {"accepted": False, "error": "Invalid upsell item"}
+
+@app.post("/api/upsell/decline")
+async def upsell_decline(request: Request):
+    """Customer declined upsell — don't ask again for this item."""
+    body = await request.json()
+    item = body.get("item", "")
+    engine = get_upsell_engine()
+    engine.decline_upsell(item)
+    return {"declined": True, "item": item}
+
+@app.post("/api/upsell/reset")
+async def upsell_reset():
+    """Reset upsell session (new customer)."""
+    engine = get_upsell_engine()
+    engine.reset_session()
+    return {"reset": True}
+
+@app.get("/api/upsell/stats")
+async def upsell_stats():
+    """Get upsell engine statistics."""
+    engine = get_upsell_engine()
+    return engine.get_upsell_stats()
+
+@app.get("/api/upsell/map")
+async def upsell_map():
+    """Return the full upsell map for debugging/admin."""
+    return {"upsell_map": {k: v for k, v in UPSELL_MAP.items()}}
+
+@app.post("/api/upsell/tts")
+async def upsell_tts(request: Request):
+    """Generate ElevenLabs TTS audio for an upsell suggestion."""
+    body = await request.json()
+    text = body.get("text", "")
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing 'text' field")
+
+    audio_bytes = await generate_upsell_audio(text)
+    if audio_bytes:
+        import base64
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        return {
+            "has_audio": True,
+            "audio_base64": audio_b64,
+            "content_type": "audio/mpeg",
+            "text": text,
+        }
+    return {
+        "has_audio": False,
+        "text": text,
+        "reason": "ElevenLabs not configured or TTS failed",
+    }
+
+
 # Setup all enhanced features
 setup_enhanced_routes(app)
 
