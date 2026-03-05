@@ -13,32 +13,8 @@
 }
 html,body { height:100%; background:var(--dark); font-family:'Segoe UI',system-ui,sans-serif; overflow:hidden; color:#fff; }
 
-/* SPLASH */
-#splash {
-  position:fixed; inset:0; z-index:100;
-  background:linear-gradient(160deg,#0F2A1A 0%,#0A1A0F 50%,#1A0F05 100%);
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-}
-#splash.hide { opacity:0; transform:scale(1.05); pointer-events:none; transition:opacity 0.3s,transform 0.3s; }
-.splash-logo {
-  width:100px; height:100px; border-radius:24px;
-  background:linear-gradient(135deg,var(--gold) 0%,var(--gold-dark) 100%);
-  display:flex; align-items:center; justify-content:center; font-size:48px; margin-bottom:24px;
-  box-shadow:0 16px 48px rgba(212,168,67,0.4);
-}
-.splash-title { font-size:32px; font-weight:800; color:var(--gold); margin-bottom:4px; }
-.splash-sub { font-size:14px; color:rgba(255,255,255,0.4); letter-spacing:2px; text-transform:uppercase; margin-bottom:48px; }
-.splash-btn {
-  background:linear-gradient(135deg,var(--gold) 0%,var(--gold-dark) 100%);
-  color:var(--dark); border:none; padding:16px 48px; border-radius:50px;
-  font-size:18px; font-weight:700; cursor:pointer;
-  box-shadow:0 8px 24px rgba(212,168,67,0.5);
-}
-.splash-btn:active { transform:scale(0.96); }
-.splash-table { margin-top:16px; font-size:13px; color:rgba(255,255,255,0.3); }
-
 /* APP LAYOUT */
-#app { height:100%; display:none; flex-direction:column; background:linear-gradient(180deg,#0A1A0F 0%,#0F1505 100%); }
+#app { height:100%; display:flex; flex-direction:column; background:linear-gradient(180deg,#0A1A0F 0%,#0F1505 100%); }
 
 /* HEADER — minimal */
 .header {
@@ -146,14 +122,6 @@ html,body { height:100%; background:var(--dark); font-family:'Segoe UI',system-u
 </head>
 <body>
 
-<div id="splash">
-  <div class="splash-logo">&#127869;</div>
-  <div class="splash-title">Khulafa Bistro</div>
-  <div class="splash-sub">Pesanan Suara</div>
-  <button class="splash-btn" onclick="startSession()">&#127908; Mula Order</button>
-  <div class="splash-table" id="splashTable">Memuatkan...</div>
-</div>
-
 <div id="app">
   <div class="header">
     <div class="header-left">
@@ -216,7 +184,6 @@ const TABLE = new URLSearchParams(location.search).get('table')
     || location.pathname.split('/').filter(Boolean).pop() || 'T01';
 window.TABLE_NUMBER = TABLE;
 
-document.getElementById('splashTable').textContent = 'Meja ' + TABLE;
 document.getElementById('tableBadge').textContent = 'Meja ' + TABLE;
 document.getElementById('successTable').textContent = 'Meja: ' + TABLE;
 
@@ -380,16 +347,6 @@ window.onTranscribing = function() {
 window.onTranscriptionResult = function(text) {
     processOrder(text);
 };
-
-// ===== START SESSION =====
-function startSession() {
-    document.getElementById('splash').classList.add('hide');
-    setTimeout(() => {
-        document.getElementById('splash').style.display = 'none';
-        document.getElementById('app').style.display = 'flex';
-        setStatus('Tekan mikrofon untuk mula');
-    }, 300);
-}
 
 // ===== MIC TOGGLE =====
 async function toggleMic() {
@@ -579,11 +536,7 @@ function showOrderSent() {
         document.getElementById('btnHantar').disabled = true;
         setMicState('idle');
         document.getElementById('waveform').classList.add('hidden');
-        // Reset to splash
-        const splash = document.getElementById('splash');
-        splash.style.display = '';
-        splash.classList.remove('hide');
-        document.getElementById('app').style.display = 'none';
+        setStatus('Tekan mikrofon untuk mula');
     }, 8000);
 }
 
