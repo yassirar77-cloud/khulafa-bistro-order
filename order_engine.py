@@ -481,14 +481,39 @@ class OrderEngine:
         else:
             items_text = ", ".join(names[:-1]) + " dan " + names[-1]
 
-        return self._response(
-            text=f"{items_text}. Ada apa-apa lagi?",
+        # --- Upsell: check for profit-driven suggestions ---
+        upsell = self._get_upsell_for_items(found_items)
+
+        if upsell:
+            # Append upsell text naturally after item confirmation
+            text = f"{items_text}. {upsell['suggestion_text']}"
+        else:
+            text = f"{items_text}. Ada apa-apa lagi?"
+
+        result = self._response(
+            text=text,
             audio_ids=audio_ids,
             action="add_items",
             new_items=new_items,
             order=updated_order,
             total=total,
         )
+        if upsell:
+            result["upsell"] = upsell
+        return result
+
+    def _get_upsell_for_items(self, found_items: list) -> dict | None:
+        """Check found items for upsell opportunities (first match wins)."""
+        try:
+            from upsell_engine import get_upsell_engine
+            upsell_eng = get_upsell_engine()
+            for name, qty, audio_id, price in found_items:
+                suggestion = upsell_eng.get_upsell(name)
+                if suggestion:
+                    return suggestion
+        except Exception as e:
+            print(f"[OrderEngine] Upsell check failed: {e}")
+        return None
 
     def _build_confirm(self, current_order: list) -> dict:
         """Build confirmation response."""
