@@ -19,21 +19,7 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
 from openai import OpenAI
 
-# ========== Qwen3 API Setup ==========
-_qwen_client = None
-
-def get_qwen_client():
-    """Lazy-init Qwen3 client (OpenAI-compatible)."""
-    global _qwen_client
-    if _qwen_client is None:
-        api_key = os.getenv("DASHSCOPE_API_KEY")
-        base_url = os.getenv("QWEN_API_URL")
-        if not api_key or not base_url:
-            return None
-        _qwen_client = OpenAI(api_key=api_key, base_url=base_url)
-    return _qwen_client
-
-# ========== DeepSeek API Setup (Intent Extraction) ==========
+# ========== DeepSeek API Setup (Extraction Only — No Conversation) ==========
 _deepseek_client = None
 
 def get_deepseek_client():
@@ -122,71 +108,8 @@ def _build_menu_list() -> str:
         lines.append(f"- {name} (RM{item['price']:.2f})")
     return "\n".join(lines)
 
-AISHA_SYSTEM_PROMPT = f"""You are Aisha, the virtual waitress at Khulafa Bistro. Your role is strictly to take orders.
-
-STRICT RULES:
-1. NEVER recommend or suggest menu items on your own
-2. ONLY confirm what customer ordered and say "Ada lagi?"
-3. Keep responses SHORT - max 1 sentence
-4. Example: "Baiklah, mee goreng satu. Ada lagi?"
-5. NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Mahu try...", "Nak tambah..."
-6. NEVER list menu categories or suggest promotions
-7. When the customer confirms the order ("tu je" / "cukup" / "dah" / "hantar" / "confirm" / "settle" / "setel" / "sekian"), reply with ONLY: CONFIRM_ORDER
-8. Understand common Malay speech patterns, slang, and misspellings
-9. CRITICAL: All mee goreng, maggi goreng, bihun, kuey teow, and indomee items ARE on the menu. NEVER say they are unavailable.
-10. NEVER mention any menu item that the customer did NOT order — not as a suggestion, not as an example, not at all.
-11. The "reply" field MUST only contain: confirmation of ordered items + "Ada lagi?" — nothing else.
-
-MENU ITEMS:
-{_build_menu_list()}
-
-RESPONSE FORMAT — Always respond in this EXACT JSON format, nothing else:
-
-When customer orders items:
-{{"items": ["roti canai", "maggi goreng"], "action": "add_items", "reply": "Roti Canai dan Maggi Goreng. Ada lagi?"}}
-
-When customer confirms the order:
-{{"items": [], "action": "confirm_order", "reply": "Terima kasih! Pesanan sudah dihantar."}}
-
-When you cannot understand:
-{{"items": [], "action": "unclear", "reply": "Maaf, boleh ulang sekali lagi?"}}
-
-IMPORTANT:
-- Item names in the "items" array MUST be lowercase and match the menu item names exactly when possible
-- If the customer orders something not on the menu, still include it in the items array with best-guess name
-- Always respond with valid JSON only — no extra text before or after"""
-
-
-# Recommendation/upsell phrases to strip from Aisha replies
-_RECOMMENDATION_PATTERNS = [
-    r"cuba\s+juga",
-    r"mungkin\s+nak\s+try",
-    r"kami\s+ada",
-    r"nak\s+tambah",
-    r"boleh\s+cuba",
-    r"mahu\s+try",
-    r"ingin\s+mencuba",
-    r"try\s+juga",
-    r"recommend",
-    r"syorkan",
-    r"cadangkan",
-    r"promosi",
-    r"special\s+hari\s+ini",
-    r"menu\s+hari\s+ini",
-]
-
-def _strip_recommendations(reply: str) -> str:
-    """Remove any recommendation sentences from Aisha's reply."""
-    import re
-    sentences = re.split(r'(?<=[.?!])\s+', reply.strip())
-    clean = []
-    for s in sentences:
-        s_lower = s.lower()
-        if any(re.search(p, s_lower) for p in _RECOMMENDATION_PATTERNS):
-            continue
-        clean.append(s)
-    result = ' '.join(clean).strip()
-    return result if result else reply
+# DeepSeek extraction-only system prompt — no conversation, no Aisha personality
+DEEPSEEK_EXTRACT_SYSTEM = "Extract menu items and quantities from Malay text. Return ONLY JSON array: [{\"item\": \"exact menu name\", \"qty\": number, \"modifiers\": []}]. No conversation."
 
 
 def fuzzy_match_menu_item(item_text: str) -> list:
@@ -971,6 +894,26 @@ def run_telegram_bot():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(start_bot())
 
+# ========== Cached Menu for Fast Frontend Load ==========
+
+@app.get("/api/menu/voice")
+async def get_voice_menu():
+    """Return full menu dict for frontend caching. Called once on app load."""
+    return {
+        "menu": {name: {"price": item["price"]} for name, item in MENU.items()},
+        "categories": _build_menu_categories(),
+    }
+
+def _build_menu_categories():
+    """Group menu items by category prefix for display."""
+    cats = {}
+    for name, item in MENU.items():
+        prefix = name.split()[0].upper()
+        if prefix not in cats:
+            cats[prefix] = []
+        cats[prefix].append({"name": name, "price": item["price"]})
+    return cats
+
 # ========== Voice QR Ordering Routes ==========
 
 class VoiceOrderItem(BaseModel):
@@ -1001,15 +944,15 @@ async def serve_voice_page(table_number: str):
 @app.post("/api/voice/chat")
 async def voice_chat(request: Request):
     """
-    Dual AI Pipeline:
-    STEP 1 - DeepSeek: Intent extraction & fuzzy menu matching from raw speech
-    STEP 2 - Qwen Max: Natural Aisha conversation response
-
-    Non-ordering messages (greetings, confirmations, cancel) skip DeepSeek
-    and go straight to Qwen Max.
+    SPEED-OPTIMIZED PIPELINE — No conversation, extraction only.
+    Voice → Whisper STT → DeepSeek extraction (JSON) → Display order instantly.
+    Non-ordering intents (confirm, cancel) handled locally — ZERO API calls.
     """
     import json as json_lib
     import re
+    import time
+
+    t0 = time.time()
 
     body = await request.json()
     speech = body.get("message", "")
@@ -1017,561 +960,177 @@ async def voice_chat(request: Request):
     current_order = body.get("order", [])
     table = body.get("table_number", "T01")
 
-    from order_engine import MENU, AUDIO_RESPONSES
+    from order_engine import MENU, AUDIO_RESPONSES, END_PHRASES, MALAY_NUMBERS
 
-    qwen_client = get_qwen_client()
-    model = os.getenv("QWEN_MODEL", "qwen-max")
-
-    # ── Detect if this is an ordering message or a non-ordering message ──
-    # Non-ordering: greetings, confirmations, cancellations, questions, etc.
     speech_lower = speech.lower().strip()
 
-    NON_ORDER_PATTERNS = [
-        # Confirmations / end-of-order
-        r"\b(tu\s*je|tu\s*jer|itu\s*je|cukup|dah|sekian|confirm|settle|setel|hantar)\b",
-        # Cancel / remove / change
-        r"\b(cancel|batal|tak\s*jadi|tak\s*nak|remove|buang|padam|tukar|ubah|salah|mula\s*balik|start\s*over)\b",
-        # Greetings
-        r"\b(hi|hello|helo|hey|assalamualaikum|salam|selamat)\b",
-        # Questions about menu / recommendations
-        r"\b(apa\s+yang|recommend|cadang|menu|senarai)\b",
-        # Yes/No responses
-        r"^(ya|yes|ok|okay|tidak|tak|no)\s*$",
-        # Thank you
-        r"\b(terima\s*kasih|thank|thanks|tq)\b",
-    ]
+    # ── LOCAL INTENT DETECTION — No LLM needed ──
 
-    is_ordering = True
-    for pattern in NON_ORDER_PATTERNS:
-        if re.search(pattern, speech_lower):
-            is_ordering = False
-            break
+    # 1. Confirm / end-of-order
+    from order_engine import END_PHRASES as _end
+    for phrase in _end:
+        if phrase in speech_lower:
+            if not current_order:
+                return {"action": "no_items", "new_items": [], "order": [], "total": 0, "ms": _ms(t0)}
+            total = sum(i["price"] * i["qty"] for i in current_order)
+            return {"action": "confirm_order", "new_items": [], "order": current_order, "total": total, "ms": _ms(t0)}
 
-    # ── STEP 1: DeepSeek Intent Extraction (only for ordering messages) ──
-    deepseek_result = None
+    # 2. Cancel all
+    if re.search(r'\b(cancel\s*semua|buang\s*semua|mula\s*balik|start\s*over|batalkan\s*semua)\b', speech_lower):
+        return {"action": "cancel_all", "new_items": [], "order": [], "total": 0, "ms": _ms(t0)}
 
-    if is_ordering:
-        deepseek_client = get_deepseek_client()
-        if deepseek_client:
-            menu_list_str = "\n".join([f"- {name}" for name in MENU.keys()])
+    # 3. Cancel by index ("nombor 2", "yang kedua")
+    idx_match = re.search(r'(?:nombor|number|item|yang)\s*(?:ke)?(\d+|satu|dua|tiga|empat|lima)', speech_lower)
+    if idx_match and re.search(r'\b(cancel|batal|buang|remove|tak\s*nak)\b', speech_lower):
+        malay_ord = {"satu": 0, "dua": 1, "tiga": 2, "empat": 3, "lima": 4}
+        val = idx_match.group(1)
+        cancel_index = malay_ord.get(val, int(val) - 1 if val.isdigit() else None)
+        updated = list(current_order)
+        if cancel_index is not None and 0 <= cancel_index < len(updated):
+            updated.pop(cancel_index)
+        total = sum(i["price"] * i["qty"] for i in updated)
+        return {"action": "cancel_by_index", "cancel_index": cancel_index, "new_items": [], "order": updated, "total": total, "ms": _ms(t0)}
 
-            # Build enhanced message with all speech alternatives
-            if alternatives and len(alternatives) > 1:
-                alt_text = " | ".join([
-                    f'"{a["text"]}" ({a.get("confidence", 0):.0%})'
-                    if isinstance(a, dict) else f'"{a}"'
-                    for a in alternatives
-                ])
-                alt_section = f"\nSpeech recognition alternatives (use ALL to determine correct items):\n{alt_text}"
-            else:
-                alt_section = ""
+    # 4. Cancel specific item
+    cancel_match = re.search(r'\b(?:cancel|batal|buang|remove|tak\s*nak)\s+(.+)', speech_lower)
+    if cancel_match:
+        remove_name = cancel_match.group(1).strip()
+        updated = [i for i in current_order if remove_name not in i["name"].lower()]
+        total = sum(i["price"] * i["qty"] for i in updated)
+        return {"action": "cancel_item", "remove_item": remove_name, "new_items": [], "order": updated, "total": total, "ms": _ms(t0)}
 
-            deepseek_prompt = f"""You are a food order extraction AI for Khulafa Bistro, a Malaysian mamak restaurant.
+    # 5. General cancel request
+    if re.search(r'\b(cancel|batal|buang|remove)\b', speech_lower):
+        return {"action": "cancel_request", "new_items": [], "order": current_order, "total": sum(i["price"] * i["qty"] for i in current_order), "ms": _ms(t0)}
 
-IMPORTANT: Customer is ordering via voice. Speech recognition may mishear words.
-You will receive multiple speech alternatives — use ALL of them to determine the correct menu item.
-Always match to the closest menu item. If unsure, ask customer to repeat. Never guess randomly.
+    # 6. Greeting (no LLM needed)
+    if re.search(r'\b(hi|hello|helo|hey|assalamualaikum|salam|selamat)\b', speech_lower) and not any(k in speech_lower for k in MENU):
+        return {"action": "greeting", "new_items": [], "order": current_order, "total": sum(i["price"] * i["qty"] for i in current_order), "ms": _ms(t0)}
 
-Common mishearings in Malay speech recognition:
-- "main"/"man"/"magic"/"major"/"mega" = "maggi"
-- "going"/"goring" = "goreng"
-- "camping"/"coming" = "kambing"
-- "green"/"me going" = "mee goreng"
-- "me"/"mi"/"mie"/"ming"/"meet"/"meer"/"ming" = "mee"
-- "queen teow"/"key toe"/"kway teow" = "kuey teow"
-- "non"/"nun"/"nan"/"none" = "naan"
-- "batu"/"batter" = "butter"
-- "galic"/"gali" = "garlic"
-- "aming"/"ayang"/"i am"/"eye am" = "ayam"
-- "nancy"/"nan si" = "naan cheese"
-- "non batu galic" = "naan butter garlic"
-- "roti canal"/"roti cana"/"roti channel" = "roti canai"
-- "teh tariq"/"the tarik"/"tea tarik"/"teh trick" = "teh tarik"
-- "nasi lemak" = "nasi lemak bungkus"
-- "mi goreng"/"mie goreng"/"minggu ring"/"minggu ni"/"mingu ni"/"minggu"/"mingu" = "mee goreng"
-- "main goreng" = could be "maggi goreng" or "mee goreng" (use context to decide)
-- "maggie"/"megi"/"meggi"/"mackey" = "maggi"
-- "bee hun"/"bi hun"/"mihun" = "bihun"
-- "kuay teow"/"koay teow"/"char kuey teow"/"kuey tiau"/"kuetiau"/"kway tiaw"/"kwetiau" = "kuey teow goreng"
-- "indo mee"/"indo mi"/"indomie" = "indomee"
-- "die ging"/"dye ging" = "daging"
-- "running"/"rending" = "rendang"
-- "my sir"/"my sir" = "mysur"
-- "roti channel"/"roti chenai" = "roti canai"
-- "martabak" = "murtabak"
-- "biryani"/"beriani" = "briyani"
-- "my low"/"mi lo"/"mellow" = "milo"
-- "melo ice"/"milo ice" = "milo ais"
-- "copy ice"/"coffee ice"/"kopi ice" = "kopi ais"
-- "copy"/"coffee" = "kopi panas"
-- "banding"/"bandong"/"ban dong"/"min bandung" = "bandung"
-- "sir up"/"serap"/"syrup" = "sirap"
-- "barley"/"bali"/"barely" = "barli"
-- "air crossing"/"air kosmos" = "air kosong"
-- "chin chow"/"chin chou"/"cincao" = "cincau"
-- "long an"/"long gone" = "longan"
+    # ── STEP 1: Try local rule-based extraction first (instant, zero cost) ──
+    engine = get_engine()
+    local_result = engine.process(speech, current_order)
 
-NOODLE ITEMS ON MENU (these are ALL valid - never say they are unavailable):
-- maggi goreng, maggi goreng mamak, maggi goreng ayam, maggi goreng daging, maggi goreng kambing
-- maggi tomyam, maggi sup
-- mee goreng, mee goreng mamak, mee goreng ayam, mee goreng daging, mee goreng seafood
-- mee rebus, mee sup, mee campur bihun
-- bihun goreng, bihun goreng mamak, bihun sup
-- kuey teow goreng, kuey teow goreng mamak, kuey teow tomyam
-- indomee goreng, indomee double, indomee kosong
+    if local_result["action"] == "add_items" and local_result["new_items"]:
+        # Local engine matched — skip DeepSeek entirely
+        local_result["ms"] = _ms(t0)
+        local_result["pipeline"] = "local"
+        print(f"[SPEED] Local extraction: {_ms(t0)}ms")
+        return local_result
 
-DRINK ITEMS ON MENU (these are ALL valid - never say they are unavailable):
-- milo ais, milo panas
-- teh tarik, teh ais
-- kopi ais, kopi panas
-- bandung, bandung ais, bandung panas
-- sirap ais, sirap panas
-- barli ais, barli panas
-- air kosong, air mineral
-- cincau, longan
+    # ── STEP 2: DeepSeek extraction — JSON only, no conversation ──
+    deepseek_client = get_deepseek_client()
+    if not deepseek_client:
+        # No DeepSeek configured — return local result as-is
+        local_result["ms"] = _ms(t0)
+        local_result["pipeline"] = "local-only"
+        return local_result
 
-FUZZY MATCHING RULES:
-- If customer says a partial name like "min bandung", match to "bandung"
-- If customer says multiple drink keywords in one phrase like "sirap ais barli", extract MULTIPLE items: "sirap ais" AND "barli ais"
-- Always prefer the longest matching menu item name
-- If customer says just "milo" without hot/cold, default to "milo ais"
-- If customer says just "kopi" without hot/cold, default to "kopi panas"
-- If customer says just "barli" without hot/cold, default to "barli ais"
-- If customer says just "sirap" without hot/cold, default to "sirap ais"
+    menu_list_str = "\n".join([f"- {name} (RM{item['price']:.2f})" for name, item in MENU.items()])
 
-MALAY NUMBER WORDS: satu=1, dua=2, tiga=3, empat=4, lima=5, enam=6, tujuh=7, lapan=8, sembilan=9, sepuluh=10
+    # Build speech alternatives section
+    alt_section = ""
+    if alternatives and len(alternatives) > 1:
+        alt_text = " | ".join([
+            f'"{a["text"]}"' if isinstance(a, dict) else f'"{a}"'
+            for a in alternatives[:5]
+        ])
+        alt_section = f"\nAlternatives: {alt_text}"
 
-CUSTOMER SPECIAL REQUESTS & MODIFIERS:
-Customers frequently add modifiers to their orders. You MUST capture these as "modifiers" in the JSON output.
-
-SWEETNESS MODIFIERS:
-- "kurang manis" = less sugar
-- "tak nak manis" / "tanpa gula" / "kosong" (for drinks) = no sugar
-- "manis" / "lebih manis" = extra sweet
-- "sikit manis" / "sikit je manis" = just a little sweet
-
-STRENGTH/THICKNESS MODIFIERS (drinks):
-- "kaw" / "kow" / "pekat" = strong/thick (extra concentrated)
-- "cair" / "ringan" = diluted/light/weak
-
-TEMPERATURE MODIFIERS:
-- "kurang ais" / "sikit ais" = less ice
-- "tak nak ais" / "tanpa ais" = no ice
-- "banyak ais" / "extra ice" = extra ice
-- "panas" / "hot" = hot
-- "suam" / "warm" = warm/lukewarm
-
-MILK MODIFIERS (for teh/kopi/milo/nescafe):
-- "tarik" = pulled with condensed milk (frothy)
-- "tabur" = powder sprinkled on top (for Milo/Nescafe)
-- "dinosaur" / "dino" = iced milo + extra milo powder on top
-
-SIZE MODIFIERS:
-- "besar" / "jumbo" / "large" = large size
-- "kecil" / "small" = small size
-
-FOOD EXCLUSIONS (tak nak / remove):
-- "tak nak sayur" = no vegetables
-- "tak nak biji" = no seeds/tapioca pearls
-- "tak nak timun" = no cucumber
-- "tak nak kacang" = no peanuts/beans
-- "tak nak sambal" = no sambal
-- "tak nak telur" = no egg
-- "tak nak bawang" = no onion
-- "tak nak cili" = no chili
-- "tak nak kuah" / "kering" = no gravy / dry
-- "tanpa ___" = without ___
-
-FOOD ADDITIONS (tambah / extra):
-- "tambah telur" = add egg
-- "tambah sambal" = extra sambal
-- "tambah sayur" = extra vegetables
-- "extra ___" / "lebih ___" = extra ___
-- "double" = double portion
-- "tambah cheese" / "tambah keju" = add cheese
-- "tambah daging" = add meat
-
-SPICINESS MODIFIERS:
-- "pedas" = spicy
-- "kurang pedas" = less spicy
-- "tak nak pedas" / "tak pedas" = not spicy
-- "extra pedas" / "pedas gila" = extra spicy
-
-COOKING PREFERENCES:
-- "garing" / "crispy" = crispy (for roti, ayam)
-- "lembut" = soft
-- "well done" / "masak betul" = well cooked
-- "setengah masak" = half cooked (for eggs)
-
-GENERAL MODIFIER PATTERNS:
-- "kurang ___" = less of something
-- "tak nak ___" / "tanpa ___" = without / remove something
-- "tambah ___" / "extra ___" / "lebih ___" = add more of something
-- "sikit ___" = a little bit of something
-- "banyak ___" = a lot of something
-
-IMPORTANT: Modifiers are words/phrases that describe HOW the customer wants the item prepared, NOT the item name itself. Do NOT include modifiers in the "matched_item" field. Only capture modifiers that are NOT already part of the menu item name.
-
-MENU:
+    user_prompt = f"""MENU:
 {menu_list_str}
 
-Return ONLY a JSON array of matched items. Each element:
-{{"matched_item": "exact menu item name", "quantity": number, "confidence": float 0-1, "modifiers": ["modifier1", "modifier2"]}}
+MISHEARINGS: magic/main/man=maggi, going/goring=goreng, queen teow/key toe=kuey teow, roti canal/channel=roti canai, the tarik/tea tarik=teh tarik, copy/coffee=kopi, my low/mellow=milo, banding/bandong=bandung, sir up/serap=sirap, barley/bali=barli, chin chow=cincau, martabak=murtabak, biryani/beriani=briyani, bee hun/mihun=bihun, indo mee/indomie=indomee, running/rending=rendang, camping/coming=kambing
+DEFAULTS: milo→milo ais, kopi→kopi panas, barli→barli ais, sirap→sirap ais, teh→teh tarik
+NUMBERS: satu=1,dua=2,tiga=3,empat=4,lima=5,enam=6,tujuh=7,lapan=8,sembilan=9,sepuluh=10
+MODIFIERS: kurang manis,kaw,garing,pedas,tambah telur,tak nak sayur,etc → capture in modifiers array
 
-If no modifiers, return empty array: "modifiers": []
+Customer: "{speech}"{alt_section}"""
 
-EXAMPLES:
-Input: "satu teh tarik kurang manis"
-Output: [{{"matched_item": "teh tarik", "quantity": 1, "confidence": 0.95, "modifiers": ["kurang manis"]}}]
-
-Input: "milo ais kaw satu, roti canai garing dua"
-Output: [{{"matched_item": "milo ais", "quantity": 1, "confidence": 0.95, "modifiers": ["kaw"]}}, {{"matched_item": "roti canai", "quantity": 2, "confidence": 0.95, "modifiers": ["garing"]}}]
-
-Input: "nasi goreng tak nak pedas tambah telur"
-Output: [{{"matched_item": "nasi goreng biasa", "quantity": 1, "confidence": 0.9, "modifiers": ["tak nak pedas", "tambah telur"]}}]
-
-Input: "milo dinosaur satu"
-Output: [{{"matched_item": "milo ais", "quantity": 1, "confidence": 0.95, "modifiers": ["dinosaur"]}}]
-
-If multiple items are ordered, return multiple elements.
-If unclear but you can guess, make your best guess - do NOT return empty.
-
-Customer said: "{speech}"{alt_section}
-Pick the most likely correct menu items from these alternatives."""
-
-            print(f"[Whisper] Raw text: {speech}")
-            try:
-                ds_response = deepseek_client.chat.completions.create(
-                    model="deepseek-chat",
-                    max_tokens=300,
-                    messages=[
-                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. The customer orders via voice and speech recognition may mishear Malay food words. You receive multiple speech alternatives — use ALL of them to determine the correct menu items. Return ONLY valid JSON arrays, nothing else."},
-                        {"role": "user", "content": deepseek_prompt}
-                    ]
-                )
-
-                ds_raw = ds_response.choices[0].message.content.strip()
-                # Parse DeepSeek JSON response
-                try:
-                    deepseek_result = json_lib.loads(ds_raw)
-                except json_lib.JSONDecodeError:
-                    # Try extracting JSON array from response
-                    arr_match = re.search(r'\[.*\]', ds_raw, re.DOTALL)
-                    if arr_match:
-                        deepseek_result = json_lib.loads(arr_match.group())
-
-                # Normalize to list
-                if isinstance(deepseek_result, dict):
-                    deepseek_result = [deepseek_result]
-
-                print(f"[DeepSeek] Extracted: {deepseek_result}")
-            except Exception as e:
-                print(f"[DeepSeek] Error: {e} - falling back to Qwen-only")
-                deepseek_result = None
-
-    # ── STEP 2: Qwen Max Conversation Response ──
-    if deepseek_result and is_ordering:
-        # Build a structured prompt for Qwen using DeepSeek's extraction
-        extracted_items = []
-        for item in deepseek_result:
-            name = item.get("matched_item", "")
-            qty = item.get("quantity", 1)
-            confidence = item.get("confidence", 0)
-            modifiers = item.get("modifiers", [])
-            if name:
-                qty_str = f" x{qty}" if qty > 1 else ""
-                mod_str = f" [{', '.join(modifiers)}]" if modifiers else ""
-                extracted_items.append(f"{name}{qty_str}{mod_str} (confidence: {confidence})")
-
-        items_summary = ", ".join(extracted_items) if extracted_items else "unclear"
-
-        qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
-
-STRICT RULES:
-- NEVER recommend or suggest menu items on your own
-- ONLY confirm what customer ordered and say "Ada lagi?"
-- Keep responses SHORT - max 1 sentence
-- Example: "Baiklah, mee goreng satu. Ada lagi?"
-- When an item has modifiers (e.g. kurang manis, kaw, garing), ALWAYS mention them in the reply
-- Example with modifiers: "Okay, satu Milo Ais kaw dan dua Roti Canai garing. Ada lagi?"
-- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Nak tambah..."
-- NEVER mention any food item the customer did NOT order
-- The "reply" field must ONLY contain the ordered items (with modifiers) + "Ada lagi?" — nothing else
-
-The customer said: "{speech}"
-Our order extraction system detected these items: {items_summary}
-
-MENU ITEMS AVAILABLE:
-{chr(10).join([f"- {name}" for name in MENU.keys()])}
-
-TASK:
-- Match the extracted items to the closest menu item names
-- Confirm items in 1 short sentence + "Ada lagi?"
-- ALWAYS include modifiers in the reply (e.g. "kurang manis", "kaw", "garing", "tak nak pedas")
-- IMPORTANT: If the item exists in the menu list above, NEVER say it is unavailable
-
-RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
-{{"items": ["item1", "item2"], "quantities": [1, 2], "action": "add", "reply": "Baiklah, [items with modifiers]. Ada lagi?"}}
-
-IMPORTANT:
-- "items" array = lowercase exact menu item names
-- "quantities" array = quantity for each item (same order as items array)
-- "action" must be "add"
-- Always respond with valid JSON only"""
-
-    else:
-        # Non-ordering: greetings, confirmations, cancel etc go straight to Qwen
-        order_list_str = ""
-        if current_order:
-            order_list_str = ", ".join([f"{i.get('name','')} x{i.get('qty',1)}" for i in current_order])
-
-        qwen_prompt = f"""You are Aisha, AI waitress for Khulafa Bistro.
-
-STRICT RULES:
-- NEVER recommend or suggest menu items on your own
-- ONLY confirm what customer ordered and say "Ada lagi?"
-- Keep responses SHORT - max 1 sentence
-- NEVER say "Kami ada...", "Cuba juga...", "Mungkin nak try...", "Boleh cuba...", "Nak tambah..."
-- NEVER mention any food item the customer did NOT order
-- The "reply" field must ONLY contain what the customer ordered + "Ada lagi?" — nothing else
-
-CURRENT ORDER: {json_lib.dumps(current_order) if current_order else "empty"}
-
-The customer said: "{speech}"
-
-Handle this naturally:
-- Greetings: "Hai! Nak order apa?"
-- Confirmations (tu je/cukup/dah/hantar/confirm/settle/setel/sekian): "Terima kasih! Pesanan sudah dihantar."
-- Questions: answer briefly
-- If ordering food, match to menu items
-
-CANCEL/CHANGE HANDLING:
-- If customer says "cancel", "batalkan", "tak nak", "buang", "remove" WITHOUT specifying an item:
-  - If order is empty: {{"items": [], "quantities": [], "action": "cancel_request", "reply": "Tiada item untuk dibatalkan."}}
-  - If order has items: {{"items": [], "quantities": [], "action": "cancel_request", "reply": "Nombor mana nak batalkan?"}}
-- If customer says "cancel [item]", "buang [item]", "batalkan [item]", "tak nak [item]":
-  {{"items": ["item name to cancel"], "quantities": [1], "action": "cancel_item", "reply": "Okay, [item] dah dibuang. Ada lagi?"}}
-- If customer says "tukar [old] kepada [new]", "change [old] to [new]", "ubah [old] jadi [new]":
-  {{"items": ["old item", "new item"], "quantities": [1, 1], "action": "change_item", "reply": "Okay, [old] ditukar kepada [new]. Ada lagi?"}}
-- If customer says "cancel semua", "buang semua", "mula balik", "start over":
-  {{"items": [], "quantities": [], "action": "cancel_all", "reply": "Semua dah dibuang. Nak order apa?"}}
-- If customer says a number like "nombor 1", "nombor 2", "yang pertama", "yang kedua":
-  {{"items": ["nombor X"], "quantities": [1], "action": "cancel_by_index", "reply": "Okay, [item] dah dibuang. Ada lagi?"}}
-
-RESPONSE FORMAT - Always respond in this EXACT JSON, nothing else:
-
-When customer orders items:
-{{"items": ["roti canai"], "quantities": [1], "action": "add", "reply": "Baiklah, Roti Canai. Ada lagi?"}}
-
-When customer confirms order:
-{{"items": [], "quantities": [], "action": "confirm", "reply": "Terima kasih! Pesanan sudah dihantar."}}
-
-When customer cancels (general):
-{{"items": [], "quantities": [], "action": "cancel_request", "reply": "Nombor mana nak batalkan?"}}
-
-When greeting or unclear:
-{{"items": [], "quantities": [], "action": "greeting", "reply": "your response"}}
-
-IMPORTANT: Always respond with valid JSON only - no extra text."""
-
-    # Build user message with structured alternatives for better accuracy
-    user_msg = speech
-    if alternatives:
-        # Handle both new format [{text, confidence}] and legacy [string] format
-        alt_parts = []
-        for a in alternatives:
-            if isinstance(a, dict):
-                text = a.get("text", "")
-                conf = a.get("confidence", 0)
-                if text and text != speech:
-                    alt_parts.append(f'"{text}" ({conf:.0%})')
-            elif a and a != speech:
-                alt_parts.append(f'"{a}"')
-        if alt_parts:
-            user_msg = f'{speech} (speech alternatives: {" | ".join(alt_parts)})'
-
-    response = qwen_client.chat.completions.create(
-        model=model,
-        max_tokens=100,  # Short responses = faster
-        messages=[
-            {"role": "system", "content": qwen_prompt},
-            {"role": "user", "content": user_msg}
-        ],
-        extra_body={"enable_thinking": False}
-    )
-
-    # Parse Qwen response
-    raw = response.choices[0].message.content.strip()
     try:
-        data = json_lib.loads(raw)
-    except json_lib.JSONDecodeError:
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if match:
-            try:
-                data = json_lib.loads(match.group())
-            except json_lib.JSONDecodeError:
-                data = {"items": [], "quantities": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}
-        else:
-            data = {"items": [], "quantities": [], "action": "unclear", "reply": "Maaf, boleh ulang?"}
+        ds_response = deepseek_client.chat.completions.create(
+            model="deepseek-chat",
+            max_tokens=200,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": DEEPSEEK_EXTRACT_SYSTEM},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
 
-    items = data.get("items", [])
-    quantities = data.get("quantities", [])
-    action = data.get("action", "unclear")
-    reply = _strip_recommendations(data.get("reply", ""))
+        ds_raw = ds_response.choices[0].message.content.strip()
+        # Parse JSON
+        try:
+            ds_items = json_lib.loads(ds_raw)
+        except json_lib.JSONDecodeError:
+            arr_match = re.search(r'\[.*\]', ds_raw, re.DOTALL)
+            ds_items = json_lib.loads(arr_match.group()) if arr_match else []
 
-    # Pad quantities to match items length (default qty=1)
-    while len(quantities) < len(items):
-        quantities.append(1)
+        if isinstance(ds_items, dict):
+            ds_items = [ds_items]
 
-    # Build modifiers lookup from DeepSeek result
-    deepseek_modifiers = {}
-    if deepseek_result:
-        for ds_item in deepseek_result:
-            ds_name = ds_item.get("matched_item", "").lower().strip()
-            ds_mods = ds_item.get("modifiers", [])
-            if ds_name and ds_mods:
-                deepseek_modifiers[ds_name] = ds_mods
+        print(f"[DeepSeek] Extracted: {ds_items} ({_ms(t0)}ms)")
 
-    # Look up audio and build new_items with quantities
-    audio_matches = []
+    except Exception as e:
+        print(f"[DeepSeek] Error: {e}")
+        local_result["ms"] = _ms(t0)
+        local_result["pipeline"] = "local-fallback"
+        return local_result
+
+    # ── Build order from DeepSeek extraction ──
     new_items = []
+    for ds_item in ds_items:
+        raw_name = ds_item.get("matched_item", ds_item.get("item", "")).lower().strip()
+        qty = ds_item.get("quantity", ds_item.get("qty", 1))
+        modifiers = ds_item.get("modifiers", [])
+        if not raw_name:
+            continue
 
-    for idx, item_name in enumerate(items):
-        item_lower = item_name.lower().strip()
-        qty = quantities[idx] if idx < len(quantities) else 1
-        # Get modifiers from DeepSeek for this item
-        item_modifiers = deepseek_modifiers.get(item_lower, [])
-        if item_lower in MENU:
-            # Exact match
-            menu_item = MENU[item_lower]
-            if menu_item['audio_id']:
-                audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-            new_items.append({"name": item_lower.title(), "qty": qty, "price": menu_item["price"], "modifiers": item_modifiers})
+        # Exact match
+        if raw_name in MENU:
+            new_items.append({"name": raw_name.title(), "qty": qty, "price": MENU[raw_name]["price"], "modifiers": modifiers})
         else:
-            # Fuzzy match fallback
-            fuzzy_matches = fuzzy_match_menu_item(item_lower)
-            for matched_key in fuzzy_matches:
-                menu_item = MENU[matched_key]
-                if menu_item['audio_id']:
-                    audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-                new_items.append({"name": matched_key.title(), "qty": qty, "price": menu_item["price"], "modifiers": item_modifiers})
-            if fuzzy_matches:
-                print(f"[FuzzyMatch] '{item_lower}' -> {fuzzy_matches}")
-            else:
-                print(f"[FuzzyMatch] '{item_lower}' -> no match found, dropping")
+            # Fuzzy match
+            fuzzy = fuzzy_match_menu_item(raw_name)
+            for matched_key in fuzzy:
+                new_items.append({"name": matched_key.title(), "qty": qty, "price": MENU[matched_key]["price"], "modifiers": modifiers})
 
-    # Normalize action names for frontend consistency
-    if action == "add" and new_items:
-        action = "add_items"
-    if action == "confirm":
-        action = "confirm_order"
+    if not new_items:
+        local_result["ms"] = _ms(t0)
+        local_result["pipeline"] = "deepseek-empty"
+        return local_result
 
-    # ── Handle cancel/change actions ──
-    remove_item = None
-    add_item = None
-    cancel_index = None
-
-    if action == "cancel_item" and items:
-        # Remove specific item from order
-        remove_item = items[0].lower().strip()
-
-    elif action == "change_item" and len(items) >= 2:
-        # Swap old item for new item
-        remove_item = items[0].lower().strip()
-        add_item_name = items[1].lower().strip()
-        # Look up the new item in menu
-        if add_item_name in MENU:
-            menu_item = MENU[add_item_name]
-            add_item = {"name": add_item_name.title(), "qty": 1, "price": menu_item["price"]}
-
-    elif action == "cancel_by_index" and items:
-        # Parse index from "nombor X" pattern
-        idx_str = items[0].lower().strip()
-        idx_match = re.search(r'(\d+)', idx_str)
-        if idx_match:
-            cancel_index = int(idx_match.group(1)) - 1  # 0-based
-        else:
-            # Try Malay ordinal words
-            malay_ordinals = {"pertama": 0, "kedua": 1, "ketiga": 2, "keempat": 3, "kelima": 4}
-            for word, idx in malay_ordinals.items():
-                if word in idx_str:
-                    cancel_index = idx
-                    break
-
-    # Add "ada lagi?" audio for add action
-    if action == "add_items" and new_items:
-        audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
-
-    # Add terima kasih audio for confirm
-    if action == "confirm_order":
-        audio_matches.append({"audio_path": "/audio/wavs/0021.wav", "audio_exists": True})
-
-    # Update order
+    # Merge into current order
     updated_order = list(current_order)
-
-    # Handle cancel actions on the order
-    if action == "cancel_all":
-        updated_order = []
-    elif action == "cancel_item" and remove_item:
-        updated_order = [i for i in updated_order if i["name"].lower() != remove_item]
-    elif action == "cancel_by_index" and cancel_index is not None:
-        if 0 <= cancel_index < len(updated_order):
-            removed = updated_order.pop(cancel_index)
-            reply = reply.replace("[item]", removed["name"])
+    for ni in new_items:
+        existing = None
+        for i in updated_order:
+            if i["name"].lower() == ni["name"].lower() and i.get("modifiers", []) == ni.get("modifiers", []):
+                existing = i
+                break
+        if existing:
+            existing["qty"] += ni["qty"]
         else:
-            reply = "Nombor tu tiada dalam senarai. Cuba lagi?"
-            action = "cancel_request"
-    elif action == "change_item" and remove_item:
-        updated_order = [i for i in updated_order if i["name"].lower() != remove_item]
-        if add_item:
-            updated_order.append(add_item)
-
-    # Add new items for ordering actions
-    # Items with different modifiers are treated as separate entries
-    def _find_existing(order_list, new_item):
-        for i in order_list:
-            if i["name"].lower() == new_item["name"].lower() and i.get("modifiers", []) == new_item.get("modifiers", []):
-                return i
-        return None
-
-    if action == "add_items":
-        for ni in new_items:
-            existing = _find_existing(updated_order, ni)
-            if existing:
-                existing["qty"] += ni["qty"]
-            else:
-                updated_order.append(ni)
-    elif action not in ("cancel_all", "cancel_item", "cancel_by_index", "change_item"):
-        for ni in new_items:
-            existing = _find_existing(updated_order, ni)
-            if existing:
-                existing["qty"] += ni["qty"]
-            else:
-                updated_order.append(ni)
+            updated_order.append(ni)
 
     total = sum(i["price"] * i["qty"] for i in updated_order)
 
-    # Build extracted_items list for frontend upsell checking
-    extracted_items = [ni["name"].lower() for ni in new_items]
+    print(f"[SPEED] DeepSeek pipeline: {_ms(t0)}ms")
 
-    result = {
-        "text": reply,
-        "audio_matches": audio_matches,
-        "has_audio": len(audio_matches) > 0,
-        "action": action,
+    return {
+        "action": "add_items",
         "new_items": new_items,
-        "extracted_items": extracted_items,
         "order": updated_order,
         "total": total,
-        "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
+        "pipeline": "deepseek",
+        "ms": _ms(t0),
     }
-    if remove_item:
-        result["remove_item"] = remove_item
-    if add_item:
-        result["add_item"] = add_item
-    if cancel_index is not None:
-        result["cancel_index"] = cancel_index
-    return result
+
+
+def _ms(t0):
+    """Milliseconds since t0."""
+    import time
+    return round((time.time() - t0) * 1000)
 
 @app.post("/api/voice/transcribe")
 async def voice_transcribe(request: Request):
