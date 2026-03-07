@@ -14,7 +14,7 @@ from pathlib import Path
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
 
-SRC = Path("static/audio/ElevenLabs_Untitled_project.mp3")
+SRC = Path("static/audio/wavs/ElevenLabs_Untitled_project.mp3")
 OUT_DIR = Path("static/audio/wavs")
 EXPECTED = 48
 
@@ -22,6 +22,7 @@ EXPECTED = 48
 def silence_split(audio: AudioSegment) -> list[AudioSegment]:
     """Try splitting by silence with progressively relaxed parameters."""
     configs = [
+        {"min_silence_len": 410, "silence_thresh": -36, "keep_silence": 200},
         {"min_silence_len": 700, "silence_thresh": -40, "keep_silence": 250},
         {"min_silence_len": 500, "silence_thresh": -38, "keep_silence": 200},
         {"min_silence_len": 400, "silence_thresh": -36, "keep_silence": 200},
