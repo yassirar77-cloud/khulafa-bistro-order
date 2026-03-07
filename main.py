@@ -19,6 +19,7 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
 from openai import OpenAI
 from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
+from upsell_map import get_upsell_audio, get_upsell_audio_path, UPSELL_AUDIO_MAP
 
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
@@ -1007,8 +1008,71 @@ async def voice_chat(request: Request):
     alternatives = body.get("alternatives", [])
     current_order = body.get("order", [])
     table = body.get("table_number", "T01")
+    upsell_pending = body.get("upsell_pending")  # {item, upsell_item, upsell_price}
 
     from order_engine import MENU, AUDIO_RESPONSES
+
+    # ── Handle upsell yes/no response ──
+    if upsell_pending:
+        speech_lower = speech.lower().strip()
+        accept_patterns = r"\b(ya|ok|okay|boleh|nak|yes|mau|tambah|try|jom|can)\b"
+        decline_patterns = r"\b(tak|takpe|taknak|tidak|no|cukup|skip|pass|sudah|jangan)\b"
+
+        accepted = bool(re.search(accept_patterns, speech_lower))
+        declined = bool(re.search(decline_patterns, speech_lower))
+
+        upsell_item_name = upsell_pending.get("upsell_item", "")
+        upsell_item_key = upsell_item_name.lower().strip()
+
+        updated_order = list(current_order)
+
+        if accepted and not declined:
+            # Add the upsell item to order
+            if upsell_item_key in MENU:
+                menu_item = MENU[upsell_item_key]
+                new_upsell = {
+                    "name": upsell_item_key.title(),
+                    "qty": 1,
+                    "price": menu_item["price"],
+                    "modifiers": [],
+                }
+                updated_order.append(new_upsell)
+                total = sum(i["price"] * i["qty"] for i in updated_order)
+                reply = f"Okay, {upsell_item_key.title()} ditambah! Ada lagi?"
+                audio_matches = []
+                if menu_item.get("audio_id"):
+                    audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
+                audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
+                return {
+                    "text": reply,
+                    "audio_matches": audio_matches,
+                    "has_audio": len(audio_matches) > 0,
+                    "action": "add_items",
+                    "new_items": [new_upsell],
+                    "extracted_items": [upsell_item_key],
+                    "order": updated_order,
+                    "total": total,
+                    "pipeline": "upsell_accept",
+                    "upsell_accepted": True,
+                }
+            else:
+                reply = f"Maaf, {upsell_item_name} tiada dalam menu. Ada lagi?"
+        else:
+            reply = "Okay, takpe! Ada lagi?"
+
+        total = sum(i["price"] * i["qty"] for i in updated_order)
+        return {
+            "text": reply,
+            "audio_matches": [{"audio_path": "/audio/wavs/0043.wav", "audio_exists": True}],
+            "has_audio": True,
+            "action": "upsell_declined",
+            "new_items": [],
+            "extracted_items": [],
+            "order": updated_order,
+            "total": total,
+            "pipeline": "upsell_decline",
+            "upsell_accepted": False,
+        }
 
     qwen_client = get_qwen_client()
     model = os.getenv("QWEN_MODEL", "qwen-max")
@@ -1579,16 +1643,34 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
     # Build extracted_items list for frontend upsell checking
     extracted_items = [ni["name"].lower() for ni in new_items]
 
-    # Generate ElevenLabs TTS audio for the upsell part of the reply
+    # Check for pre-recorded upsell audio from upsell_map
     upsell_audio_base64 = None
-    if upsell_suggestions and action == "add_items":
-        try:
-            audio_bytes = await generate_upsell_audio(reply)
-            if audio_bytes:
-                import base64
-                upsell_audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-        except Exception as e:
-            print(f"[UpsellTTS] Error generating audio: {e}")
+    upsell_audio_info = None
+    if action == "add_items" and new_items:
+        for ni in new_items:
+            upsell_path = get_upsell_audio_path(ni["name"])
+            if upsell_path:
+                audio_matches.append({
+                    "audio_path": upsell_path,
+                    "audio_exists": True,
+                    "is_upsell": True,
+                })
+                upsell_audio_info = {
+                    "item": ni["name"],
+                    "audio_path": upsell_path,
+                }
+                print(f"[UpsellAudio] Pre-recorded upsell for '{ni['name']}': {upsell_path}")
+                break  # Only one upsell per response
+
+        # Fallback to ElevenLabs TTS if no pre-recorded upsell audio found
+        if not upsell_audio_info and upsell_suggestions:
+            try:
+                audio_bytes = await generate_upsell_audio(reply)
+                if audio_bytes:
+                    import base64
+                    upsell_audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+            except Exception as e:
+                print(f"[UpsellTTS] Error generating audio: {e}")
 
     result = {
         "text": reply,
@@ -1601,11 +1683,13 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         "total": total,
         "pipeline": "deepseek+qwen" if (deepseek_result and is_ordering) else "qwen-only"
     }
-    if upsell_suggestions:
+    if upsell_suggestions or upsell_audio_info:
         result["upsell"] = {
             "suggestions": upsell_suggestions,
             "has_upsell": True,
         }
+        if upsell_audio_info:
+            result["upsell"]["audio_info"] = upsell_audio_info
     if upsell_audio_base64:
         result["upsell_audio"] = upsell_audio_base64
     if remove_item:
