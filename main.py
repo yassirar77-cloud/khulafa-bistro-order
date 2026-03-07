@@ -19,7 +19,7 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
 from openai import OpenAI
 from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
-from upsell_map import get_upsell_audio, get_upsell_audio_path, UPSELL_AUDIO_MAP
+from upsell_map import get_upsell_audio, get_upsell_audio_path, get_upsell_audio_info, UPSELL_AUDIO_MAP
 
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
@@ -1648,18 +1648,20 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
     upsell_audio_info = None
     if action == "add_items" and new_items:
         for ni in new_items:
-            upsell_path = get_upsell_audio_path(ni["name"])
-            if upsell_path:
+            info = get_upsell_audio_info(ni["name"])
+            if info:
                 audio_matches.append({
-                    "audio_path": upsell_path,
+                    "audio_path": info["audio_path"],
                     "audio_exists": True,
                     "is_upsell": True,
                 })
                 upsell_audio_info = {
                     "item": ni["name"],
-                    "audio_path": upsell_path,
+                    "audio_id": info["audio_id"],
+                    "audio_path": info["audio_path"],
+                    "text": info["text"],
                 }
-                print(f"[UpsellAudio] Pre-recorded upsell for '{ni['name']}': {upsell_path}")
+                print(f"[UpsellAudio] Pre-recorded upsell for '{ni['name']}': {info['audio_path']}")
                 break  # Only one upsell per response
 
         # Fallback to ElevenLabs TTS if no pre-recorded upsell audio found
