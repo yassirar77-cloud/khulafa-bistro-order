@@ -226,6 +226,7 @@ let pendingTranscript = null; // holds speech captured during processing
 let micRetryCount = 0;
 const MIC_MAX_RETRIES = 3;
 let inCancelMode = false; // true when waiting for cancel selection
+let upsellPending = null;  // {item, upsell_item, upsell_price} when waiting for upsell response
 
 document.getElementById('splashTable').textContent = 'Table ' + TABLE;
 document.getElementById('tableBadge').textContent = 'Table ' + TABLE;
@@ -443,6 +444,12 @@ async function processMessage(text, alternatives) {
       table_number: TABLE
     };
 
+    // If we're waiting for upsell response, include upsell context
+    if (upsellPending) {
+      payload.upsell_pending = upsellPending;
+      upsellPending = null;  // Clear after sending
+    }
+
     const res = await fetch('/api/voice/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -578,6 +585,27 @@ async function processMessage(text, alternatives) {
       return;
     }
 
+    // Handle upsell accept/decline responses
+    if (data.action === 'upsell_declined' || data.upsell_accepted) {
+      order = data.order || order;
+      if (data.upsell_accepted && data.new_items && data.new_items.length) {
+        showOrderCard(order, data.total);
+      } else if (order.length > 0) {
+        showOrderCard(order, data.total);
+      }
+      if (data.has_audio && data.audio_matches && data.audio_matches.length) {
+        isPlaying = true;
+        setStatus('Aisha bercakap...');
+        await playAudioSequence(data.audio_matches);
+        isPlaying = false;
+      }
+      isProcessing = false;
+      setMicState('idle');
+      setStatus('Bersedia');
+      setTimeout(() => resumeMic(), 800);
+      return;
+    }
+
     // Handle add_items — update order + show order card
     if (data.action === 'add_items' && data.new_items && data.new_items.length) {
       // Always merge into current order instead of replacing
@@ -594,6 +622,17 @@ async function processMessage(text, alternatives) {
         });
       }
       showOrderCard(order, data.total);
+
+      // If upsell audio was included, set upsell pending for next response
+      if (data.upsell && data.upsell.has_upsell && data.upsell.suggestions && data.upsell.suggestions.length > 0) {
+        const s = data.upsell.suggestions[0];
+        upsellPending = {
+          item: s.original,
+          upsell_item: s.upsell_item,
+          upsell_price: s.upsell_price,
+        };
+        console.log('[VOICE] Upsell pending:', upsellPending);
+      }
     }
 
     // Handle confirm_order — submit to Telegram
