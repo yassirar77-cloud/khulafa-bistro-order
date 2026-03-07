@@ -19,7 +19,8 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 import asyncio
 from openai import OpenAI
 from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
-from upsell_map import get_upsell_audio, get_upsell_audio_path, get_upsell_audio_info, UPSELL_AUDIO_MAP
+from upsell_map import (get_upsell_audio, get_upsell_audio_path, get_upsell_audio_info,
+                        UPSELL_AUDIO_MAP, get_combo_cross_sell, get_general_response_audio)
 
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
@@ -1039,7 +1040,11 @@ async def voice_chat(request: Request):
                 updated_order.append(new_upsell)
                 total = sum(i["price"] * i["qty"] for i in updated_order)
                 reply = f"Okay, {upsell_item_key.title()} ditambah! Ada lagi?"
+                # Use pre-recorded accept audio (UP_109)
+                accept_audio = get_general_response_audio("accept")
                 audio_matches = []
+                if accept_audio:
+                    audio_matches.append({"audio_path": accept_audio["audio_path"], "audio_exists": True, "is_upsell": True})
                 if menu_item.get("audio_id"):
                     audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
                 audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
@@ -1061,9 +1066,17 @@ async def voice_chat(request: Request):
             reply = "Okay, takpe! Ada lagi?"
 
         total = sum(i["price"] * i["qty"] for i in updated_order)
+        # Use pre-recorded decline audio (UP_110 or UP_111 for tak nak)
+        decline_type = "tak_nak" if re.search(r"\b(tak\s*nak|taknak)\b", speech_lower) else "reject"
+        decline_audio = get_general_response_audio(decline_type)
+        decline_audio_matches = []
+        if decline_audio:
+            decline_audio_matches.append({"audio_path": decline_audio["audio_path"], "audio_exists": True, "is_upsell": True})
+        else:
+            decline_audio_matches.append({"audio_path": "/audio/wavs/0043.wav", "audio_exists": True})
         return {
             "text": reply,
-            "audio_matches": [{"audio_path": "/audio/wavs/0043.wav", "audio_exists": True}],
+            "audio_matches": decline_audio_matches,
             "has_audio": True,
             "action": "upsell_declined",
             "new_items": [],
@@ -1663,6 +1676,26 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
                 }
                 print(f"[UpsellAudio] Pre-recorded upsell for '{ni['name']}': {info['audio_path']}")
                 break  # Only one upsell per response
+
+        # Combo cross-sell: suggest drink if customer ordered food but no drink
+        if not upsell_audio_info:
+            for ni in new_items:
+                combo = get_combo_cross_sell(ni["name"], updated_order)
+                if combo:
+                    audio_matches.append({
+                        "audio_path": combo["audio_path"],
+                        "audio_exists": True,
+                        "is_upsell": True,
+                    })
+                    upsell_audio_info = {
+                        "item": ni["name"],
+                        "audio_id": combo["audio_id"],
+                        "audio_path": combo["audio_path"],
+                        "text": combo["text"],
+                        "type": "combo_cross_sell",
+                    }
+                    print(f"[ComboUpsell] Drink suggestion for '{ni['name']}': {combo['audio_path']}")
+                    break
 
         # Fallback to ElevenLabs TTS if no pre-recorded upsell audio found
         if not upsell_audio_info and upsell_suggestions:
