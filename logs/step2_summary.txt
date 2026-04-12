@@ -1,0 +1,12 @@
+STEP 2 SUMMARY - Modifier Extraction
+=====================================
+Total items processed: 197
+Items with modifiers:  48
+  - takeaway ( T ):    30
+  - ais (cold):        23
+  - panas (hot):       5
+  - jumbo (size):      8
+  - besar/medium:      4
+Abbreviations expanded (G->Goreng): see detail file
+Typo fixes: 5 patterns applied
+Output: logs/step2_modifier_extraction.md (full list)
