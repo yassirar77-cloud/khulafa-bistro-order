@@ -21,6 +21,7 @@ from openai import OpenAI
 from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
 from upsell_map import (get_upsell_audio, get_upsell_audio_path, get_upsell_audio_info,
                         UPSELL_AUDIO_MAP, get_combo_cross_sell, get_general_response_audio)
+from menu_validator import validate_order_items, validate_menu_item, log_order_pipeline, get_recent_logs
 
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
@@ -154,8 +155,8 @@ When you cannot understand:
 {{"items": [], "action": "unclear", "reply": "Maaf, boleh ulang sekali lagi?"}}
 
 IMPORTANT:
-- Item names in the "items" array MUST be lowercase and match the menu item names exactly when possible
-- If the customer orders something not on the menu, still include it in the items array with best-guess name
+- Item names in the "items" array MUST be lowercase and match the menu item names EXACTLY
+- NEVER include items that are not on the menu — if you cannot match, set action to "unclear" and ask the customer to repeat
 - Always respond with valid JSON only — no extra text before or after"""
 
 
@@ -1302,7 +1303,8 @@ Input: "milo dinosaur satu"
 Output: [{{"matched_item": "milo ais", "quantity": 1, "confidence": 0.95, "modifiers": ["dinosaur"]}}]
 
 If multiple items are ordered, return multiple elements.
-If unclear but you can guess, make your best guess - do NOT return empty.
+If unclear or no confident match (confidence < 0.6), return: [{{"matched_item": "", "quantity": 0, "confidence": 0, "modifiers": [], "needs_clarification": true, "heard_text": "what you heard"}}]
+NEVER guess randomly — only match items you are confident about.
 
 Customer said: "{speech}"{alt_section}
 Pick the most likely correct menu items from these alternatives."""
@@ -1534,33 +1536,64 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
             if ds_name and ds_mods:
                 deepseek_modifiers[ds_name] = ds_mods
 
-    # Look up audio and build new_items with quantities
-    audio_matches = []
-    new_items = []
-
+    # ── VALIDATION LAYER: Ground every item against the real menu ──
+    # Build extracted_items list for the validator (merge Qwen items + DeepSeek data)
+    items_for_validation = []
     for idx, item_name in enumerate(items):
         item_lower = item_name.lower().strip()
         qty = quantities[idx] if idx < len(quantities) else 1
-        # Get modifiers from DeepSeek for this item
-        item_modifiers = deepseek_modifiers.get(item_lower, [])
-        if item_lower in MENU:
-            # Exact match
-            menu_item = MENU[item_lower]
-            if menu_item['audio_id']:
-                audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-            new_items.append({"name": item_lower.title(), "qty": qty, "price": menu_item["price"], "modifiers": item_modifiers})
+        mods = deepseek_modifiers.get(item_lower, [])
+        items_for_validation.append({
+            "matched_item": item_lower,
+            "quantity": qty,
+            "confidence": 0.9,
+            "modifiers": mods,
+        })
+
+    # Also validate DeepSeek items that Qwen may have missed
+    if deepseek_result and is_ordering:
+        qwen_item_names = {i.lower().strip() for i in items}
+        for ds_item in deepseek_result:
+            ds_name = ds_item.get("matched_item", "").lower().strip()
+            if ds_name and ds_name not in qwen_item_names:
+                # DeepSeek found an item Qwen missed — include it
+                items_for_validation.append(ds_item)
+
+    validation_result = validate_order_items(items_for_validation)
+
+    # Build audio_matches and new_items from VALIDATED items only
+    audio_matches = []
+    new_items = []
+
+    for vi in validation_result["valid_items"]:
+        menu_item = MENU[vi["item_key"]]
+        if menu_item["audio_id"]:
+            audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
+        new_items.append({
+            "name": vi["item_key"].title(),
+            "qty": vi["quantity"],
+            "price": vi["price"],
+            "modifiers": vi["modifiers"],
+        })
+        if vi.get("corrected_from"):
+            print(f"[Validator] Corrected '{vi['corrected_from']}' -> '{vi['item_key']}'")
+
+    # Handle invalid items — ask for clarification instead of silently dropping
+    if validation_result["invalid_items"]:
+        invalid_names = [inv["original"] for inv in validation_result["invalid_items"]]
+        print(f"[Validator] Invalid items rejected: {invalid_names}")
+        if not new_items:
+            # ALL items were invalid — ask customer to clarify
+            reply = f"Maaf, saya tak pasti '{', '.join(invalid_names)}'. Boleh ulang sekali lagi?"
+            action = "unclear"
         else:
-            # Fuzzy match fallback
-            fuzzy_matches = fuzzy_match_menu_item(item_lower)
-            for matched_key in fuzzy_matches:
-                menu_item = MENU[matched_key]
-                if menu_item['audio_id']:
-                    audio_matches.append({"audio_path": f"/audio/wavs/{menu_item['audio_id']}.wav", "audio_exists": True})
-                new_items.append({"name": matched_key.title(), "qty": qty, "price": menu_item["price"], "modifiers": item_modifiers})
-            if fuzzy_matches:
-                print(f"[FuzzyMatch] '{item_lower}' -> {fuzzy_matches}")
-            else:
-                print(f"[FuzzyMatch] '{item_lower}' -> no match found, dropping")
+            # Some valid, some invalid — confirm valid ones, ask about invalid
+            invalid_text = ", ".join(invalid_names)
+            reply = reply + f" ('{invalid_text}' — maaf, boleh ulang item tu?)"
+
+    # Log modifier warnings
+    for mw in validation_result.get("modifier_warnings", []):
+        print(f"[Validator] Modifier warning: '{mw['modifier']}' not valid for {mw['item']} ({mw['reason']})")
 
     # Normalize action names for frontend consistency
     if action == "add" and new_items:
@@ -1733,6 +1766,32 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         result["add_item"] = add_item
     if cancel_index is not None:
         result["cancel_index"] = cancel_index
+
+    # Include validation info for transparency
+    if validation_result.get("invalid_items"):
+        result["validation_warnings"] = validation_result["invalid_items"]
+    if validation_result.get("modifier_warnings"):
+        result["modifier_warnings"] = validation_result["modifier_warnings"]
+
+    # ── LOG: Full pipeline for observability ──
+    try:
+        ds_raw_str = ""
+        if deepseek_result:
+            import json as _jl
+            ds_raw_str = _jl.dumps(deepseek_result, ensure_ascii=False)
+        log_order_pipeline(
+            table_number=table,
+            whisper_transcript=speech,
+            deepseek_raw=ds_raw_str,
+            deepseek_parsed=deepseek_result,
+            validated_result=validation_result,
+            final_order=updated_order,
+            pipeline=result.get("pipeline", "unknown"),
+            qwen_reply=reply,
+        )
+    except Exception as log_err:
+        print(f"[OrderLog] Logging failed (non-blocking): {log_err}")
+
     return result
 
 @app.post("/api/voice/transcribe")
@@ -1789,6 +1848,60 @@ async def voice_transcribe(request: Request):
     except Exception as e:
         print(f"[Whisper] Error: {e}")
         raise HTTPException(status_code=500, detail=f"Whisper transcription failed: {str(e)}")
+
+
+@app.get("/api/voice/order-logs")
+async def get_order_logs(limit: int = 50):
+    """View recent order pipeline logs for debugging and observability."""
+    logs = get_recent_logs(limit)
+    return {"logs": logs, "count": len(logs)}
+
+
+@app.post("/api/voice/confirm-order")
+async def voice_confirm_order(request: Request):
+    """
+    Confirmation flow: customer must confirm the readback before Telegram send.
+    Frontend calls this AFTER Aisha reads back the order and customer says "ya"/"confirm".
+    This prevents wrong orders from being sent to kitchen.
+    """
+    body = await request.json()
+    table = body.get("table_number", "T01")
+    order_items = body.get("items", [])
+    total = body.get("total", 0)
+    confirmed = body.get("confirmed", False)
+
+    if not confirmed:
+        # Build readback text for Aisha to speak
+        if not order_items:
+            return {
+                "action": "no_items",
+                "text": "Anda belum order apa-apa lagi.",
+                "confirmed": False,
+            }
+
+        items_text = ", ".join(
+            f"{i.get('qty', 1)} {i['name']}" +
+            (f" ({', '.join(i['modifiers'])})" if i.get('modifiers') else "")
+            for i in order_items
+        )
+        total_calc = sum(i.get("price", 0) * i.get("qty", 1) for i in order_items)
+        readback = f"Pesanan anda: {items_text}. Jumlah RM{total_calc:.2f}. Betul ke?"
+
+        return {
+            "action": "readback",
+            "text": readback,
+            "items": order_items,
+            "total": total_calc,
+            "confirmed": False,
+        }
+
+    # Customer confirmed — proceed to send
+    return {
+        "action": "confirmed",
+        "text": "Terima kasih! Pesanan sudah dihantar ke dapur.",
+        "confirmed": True,
+        "ready_to_send": True,
+    }
 
 
 @app.get("/api/voice/greeting")
