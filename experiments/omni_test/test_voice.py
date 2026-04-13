@@ -111,8 +111,11 @@ async def run_session():
 
     # Handle Ctrl+C
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+    if sys.platform == "win32":
+        signal.signal(signal.SIGINT, lambda s, f: stop.set())
+    else:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
 
     try:
         async with websockets.connect(WS_URL, additional_headers=headers) as ws:
