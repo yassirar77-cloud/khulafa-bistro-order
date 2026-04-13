@@ -1,0 +1,4 @@
+dashscope
+pyaudio
+websockets
+python-dotenv
