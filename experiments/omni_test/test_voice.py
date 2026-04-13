@@ -5,16 +5,22 @@ Captures mic audio, streams to Omni, plays voice response, prints transcript.
 
 Usage:  python test_voice.py
 Stop:   Ctrl+C
+
+Device selection:
+  - Set MIC_DEVICE_INDEX / SPEAKER_DEVICE_INDEX in .env, or
+  - Pick interactively when prompted.
+  - Defaults: input=1 (Microphone Array Realtek), output=3 (Speakers Realtek)
 """
 
 import asyncio
 import base64
 import json
+import math
 import os
 import signal
 import struct
 import sys
-import uuid
+import time
 
 import pyaudio
 import websockets
@@ -34,6 +40,11 @@ CHANNELS = 1
 FORMAT = pyaudio.paInt16
 CHUNK = 2400       # 100 ms frames at 24 kHz
 
+DEFAULT_MIC_INDEX = 1       # Microphone Array (Realtek)
+DEFAULT_SPEAKER_INDEX = 3   # Speakers (Realtek)
+
+SILENCE_THRESHOLD = 500     # RMS above this = audible speech
+
 PROMPT_FILE = os.path.join(REPO_ROOT, "aisha_omni_system_prompt.txt")
 FALLBACK_PROMPT = (
     "Kau adalah Aisha, pelayan virtual di Khulafa Bistro. "
@@ -50,17 +61,76 @@ def load_system_prompt() -> str:
     return FALLBACK_PROMPT
 
 
+# ── Device selection ──────────────────────────────────────────────────────────
+
+def list_audio_devices():
+    """Print all audio devices with index numbers."""
+    pa = pyaudio.PyAudio()
+    count = pa.get_device_count()
+    print(f"\n{'='*60}")
+    print(f"  Audio Devices ({count} found)")
+    print(f"{'='*60}")
+    inputs = []
+    outputs = []
+    for i in range(count):
+        info = pa.get_device_info_by_index(i)
+        name = info.get("name", "Unknown")
+        max_in = info.get("maxInputChannels", 0)
+        max_out = info.get("maxOutputChannels", 0)
+        direction = []
+        if max_in > 0:
+            direction.append("IN")
+            inputs.append(i)
+        if max_out > 0:
+            direction.append("OUT")
+            outputs.append(i)
+        tag = "/".join(direction) if direction else "---"
+        print(f"  [{i:2d}] ({tag:7s})  {name}")
+    print(f"{'='*60}")
+    pa.terminate()
+    return inputs, outputs
+
+
+def pick_device(direction: str, env_var: str, default: int, valid_indices: list) -> int:
+    """Resolve device index from env var, interactive prompt, or default."""
+    env_val = os.getenv(env_var)
+    if env_val is not None:
+        idx = int(env_val)
+        print(f"  {direction} device from {env_var}: [{idx}]")
+        return idx
+
+    prompt = f"  Pick {direction} device index [{default}]: "
+    raw = input(prompt).strip()
+    if raw == "":
+        return default
+    idx = int(raw)
+    if idx not in valid_indices:
+        print(f"  WARNING: device {idx} may not support {direction}")
+    return idx
+
+
 # ── Audio helpers ─────────────────────────────────────────────────────────────
+
+def rms(pcm_bytes: bytes) -> float:
+    """Compute RMS amplitude of PCM16 audio."""
+    n = len(pcm_bytes) // 2
+    if n == 0:
+        return 0.0
+    samples = struct.unpack(f"<{n}h", pcm_bytes)
+    return math.sqrt(sum(s * s for s in samples) / n)
+
 
 class AudioPlayer:
     """Plays raw PCM16-24kHz chunks via PyAudio."""
 
-    def __init__(self):
+    def __init__(self, device_index: int):
         self._pa = pyaudio.PyAudio()
         self._stream = self._pa.open(
             format=FORMAT, channels=CHANNELS, rate=RATE, output=True,
+            output_device_index=device_index,
             frames_per_buffer=CHUNK,
         )
+        self.device_index = device_index
 
     def play(self, pcm_bytes: bytes):
         self._stream.write(pcm_bytes)
@@ -74,12 +144,14 @@ class AudioPlayer:
 class MicCapture:
     """Captures mic audio as PCM16-24kHz chunks."""
 
-    def __init__(self):
+    def __init__(self, device_index: int):
         self._pa = pyaudio.PyAudio()
         self._stream = self._pa.open(
             format=FORMAT, channels=CHANNELS, rate=RATE, input=True,
+            input_device_index=device_index,
             frames_per_buffer=CHUNK,
         )
+        self.device_index = device_index
 
     def read_chunk(self) -> bytes:
         return self._stream.read(CHUNK, exception_on_overflow=False)
@@ -92,21 +164,24 @@ class MicCapture:
 
 # ── WebSocket session ─────────────────────────────────────────────────────────
 
-async def run_session():
+async def run_session(mic_idx: int, spk_idx: int):
     if not API_KEY:
         print("ERROR: DASHSCOPE_API_KEY not found in .env")
         sys.exit(1)
 
     system_prompt = load_system_prompt()
     print(f"[init] System prompt loaded ({len(system_prompt)} chars)")
+
+    player = AudioPlayer(spk_idx)
+    mic = MicCapture(mic_idx)
+    print(f"[init] Listening on device {mic_idx}")
+    print(f"[init] Playing on device {spk_idx}")
     print(f"[init] Connecting to {MODEL} ...")
 
     headers = {
         "Authorization": f"bearer {API_KEY}",
     }
 
-    player = AudioPlayer()
-    mic = MicCapture()
     stop = asyncio.Event()
 
     # Handle Ctrl+C
@@ -139,9 +214,19 @@ async def run_session():
             print("[init] Session config sent. Speak into your mic!\n")
 
             # ── 2. Mic streaming task ─────────────────────────────────────
+            last_dot_time = 0.0
+
             async def stream_mic():
+                nonlocal last_dot_time
                 while not stop.is_set():
                     pcm = await loop.run_in_executor(None, mic.read_chunk)
+                    # Audio level indicator — print . every ~1s when above silence
+                    level = rms(pcm)
+                    now = time.monotonic()
+                    if level > SILENCE_THRESHOLD and now - last_dot_time >= 1.0:
+                        print(".", end="", flush=True)
+                        last_dot_time = now
+
                     audio_b64 = base64.b64encode(pcm).decode("ascii")
                     msg = {
                         "type": "input_audio_buffer.append",
@@ -219,8 +304,17 @@ async def run_session():
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("=" * 50)
+    print("=" * 60)
     print("  Khulafa Bistro — Aisha Omni Voice Test")
     print("  Ctrl+C to exit")
-    print("=" * 50)
-    asyncio.run(run_session())
+    print("=" * 60)
+
+    input_devs, output_devs = list_audio_devices()
+
+    print("\n  Device Selection")
+    print("  (set MIC_DEVICE_INDEX / SPEAKER_DEVICE_INDEX in .env to skip)")
+    mic_idx = pick_device("INPUT", "MIC_DEVICE_INDEX", DEFAULT_MIC_INDEX, input_devs)
+    spk_idx = pick_device("OUTPUT", "SPEAKER_DEVICE_INDEX", DEFAULT_SPEAKER_INDEX, output_devs)
+    print()
+
+    asyncio.run(run_session(mic_idx, spk_idx))
