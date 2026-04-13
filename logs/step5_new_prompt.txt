@@ -1,0 +1,4 @@
+Added after FUZZY MATCHING RULES section in main.py DeepSeek prompt:
+
+COMMON ORDERS (prioritize these when ambiguous):
+ais kosong, teh o ais, roti canai, teh, nasi ayam, teh ais, milo ais, air suam, nasi ayam sayur, roti telur, ayam goreng, nasi ayam bawang, telur mata, teh o, naan mozzerella cheese, nasi goreng ayam, mee goreng mamak, teh o limau ais, nasi ayam bawang sayur, nasi putih, nasi goreng kampung, maggi goreng, limau ais, extra joss angur, maggi goreng telur mata, ayam tandoori, roti bakar, naan biasa, nasi lemak bungkus, telur masin

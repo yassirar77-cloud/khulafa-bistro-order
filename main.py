@@ -1208,6 +1208,9 @@ FUZZY MATCHING RULES:
 - If customer says just "barli" without hot/cold, default to "barli ais"
 - If customer says just "sirap" without hot/cold, default to "sirap ais"
 
+COMMON ORDERS (prioritize these when ambiguous):
+ais kosong, teh o ais, roti canai, teh, nasi ayam, teh ais, milo ais, air suam, nasi ayam sayur, roti telur, ayam goreng, nasi ayam bawang, telur mata, teh o, naan mozzerella cheese, nasi goreng ayam, mee goreng mamak, teh o limau ais, nasi ayam bawang sayur, nasi putih, nasi goreng kampung, maggi goreng, limau ais, extra joss angur, maggi goreng telur mata, ayam tandoori, roti bakar, naan biasa, nasi lemak bungkus, telur masin
+
 MALAY NUMBER WORDS: satu=1, dua=2, tiga=3, empat=4, lima=5, enam=6, tujuh=7, lapan=8, sembilan=9, sepuluh=10
 
 CUSTOMER SPECIAL REQUESTS & MODIFIERS:
