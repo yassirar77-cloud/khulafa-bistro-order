@@ -301,3 +301,15 @@ class TestMenuIntegrity:
         """Menu must have roti items."""
         roti_items = [k for k in MENU if _get_item_category(k) == "roti"]
         assert len(roti_items) >= 10, f"Only {len(roti_items)} roti items in menu"
+
+
+class TestFuzzyPopularityTieBreak:
+    """Fuzzy match should prefer higher-popularity item when scores are tied."""
+
+    def test_teh_matches_teh_not_teh_o(self):
+        """'teh' (pop=60) should beat 'teh o' (pop=18) or 'teh c' (pop=2) on fuzzy tie."""
+        result = validate_menu_item("teh")
+        assert result["valid"] is True
+        assert result["item_key"] == "teh", (
+            f"Expected 'teh' (pop=60) but got '{result['item_key']}'"
+        )

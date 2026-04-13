@@ -223,14 +223,17 @@ def validate_menu_item(item_name: str) -> dict:
             "corrected_from": item_lower if best != item_lower else None,
         }
 
-    # 3. Fuzzy match using SequenceMatcher
+    # 3. Fuzzy match using SequenceMatcher — tie-break by popularity
     best_score = 0
     best_key = None
+    best_pop = -1
     for key in _SORTED_KEYS:
         score = SequenceMatcher(None, item_lower, key).ratio()
-        if score > best_score:
+        pop = MENU[key].get("popularity", 0)
+        if score > best_score or (score == best_score and pop > best_pop):
             best_score = score
             best_key = key
+            best_pop = pop
 
     if best_score >= 0.7 and best_key:
         m = MENU[best_key]
