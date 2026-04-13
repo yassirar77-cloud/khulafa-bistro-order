@@ -1,0 +1,70 @@
+STEP 3 SUMMARY
+========================================
+Old MENU:        111 items
+New MENU:        248 items
+Items added:     137
+Prices updated:  33
+Kept (not in new JSON, pop=0): 62
+
+  air kosong  RM0.30
+  air mineral  RM1.50
+  ayam kari  RM7.00
+  ayam rendang  RM8.00
+  bandung  RM2.50
+  bandung ais  RM3.00
+  bandung panas  RM2.50
+  bihun goreng  RM6.00
+  briyani ayam  RM10.00
+  briyani ayam goreng set  RM14.00
+  briyani daging set  RM18.00
+  briyani kambing set  RM20.00
+  briyani lamb shank  RM25.00
+  cincau  RM3.00
+  daging rendang  RM10.00
+  indomee double  RM8.50
+  indomee kosong  RM4.50
+  kambing mysur  RM15.00
+  kopi panas  RM1.70
+  kuey teow goreng  RM6.00
+  kuey teow tomyam  RM7.00
+  longan  RM3.50
+  maggi goreng ayam  RM9.50
+  maggi goreng basa  RM7.00
+  maggi goreng daging  RM9.50
+  maggi goreng kambing  RM13.00
+  maggi goreng mamak  RM6.00
+  maggi tomyam  RM7.00
+  mee campur bihun  RM6.00
+  mee goreng  RM6.00
+  mee goreng ayam  RM9.50
+  mee goreng daging  RM9.50
+  mee goreng seafood  RM9.50
+  mee rebus  RM6.00
+  mee sup  RM6.00
+  milo panas  RM2.80
+  murtabak ayam  RM9.00
+  murtabak daging  RM10.00
+  murtabak kambing  RM12.00
+  naan butter  RM4.00
+  naan butter garlic  RM4.50
+  naan cheese double  RM7.00
+  naan cheese garlic  RM5.50
+  naan mumtaj  RM8.00
+  naan tajmahal  RM9.00
+  nasi ayam rendang  RM10.00
+  nasi daging  RM10.00
+  nasi goreng seafood  RM11.00
+  roti bakar cheese  RM4.00
+  roti bakar kaya  RM3.50
+  roti bawang  RM2.50
+  roti boom kaya  RM3.50
+  roti canai susu  RM3.00
+  roti jantan  RM4.00
+  roti milo  RM3.50
+  roti pisang cheese  RM4.50
+  roti special  RM5.00
+  roti special double  RM7.00
+  roti telur cheese  RM4.50
+  roti tissue  RM3.00
+  sirap panas  RM1.80
+  teh tarik  RM2.00
