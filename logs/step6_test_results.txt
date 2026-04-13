@@ -1,0 +1,1178 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/user/khulafa-bistro-order
+configfile: pytest.ini
+plugins: anyio-4.13.0, cov-7.1.0, asyncio-1.3.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 228 items
+
+tests/test_aisha_voice.py::TestMetadataLoading::test_metadata_loads PASSED [  0%]
+tests/test_aisha_voice.py::TestMetadataLoading::test_metadata_count PASSED [  0%]
+tests/test_aisha_voice.py::TestMetadataLoading::test_entries_have_required_fields PASSED [  1%]
+tests/test_aisha_voice.py::TestMetadataLoading::test_text_index_built PASSED [  1%]
+tests/test_aisha_voice.py::TestMetadataLoading::test_missing_metadata_file PASSED [  2%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_exact_match PASSED    [  2%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_exact_match_case_insensitive PASSED [  3%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_punctuation_insensitive PASSED [  3%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_empty_string_returns_none PASSED [  3%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_gibberish_below_threshold PASSED [  4%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_fuzzy_match_typo PASSED [  4%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_result_has_audio_path PASSED [  5%]
+tests/test_aisha_voice.py::TestFindBestMatch::test_result_audio_exists_flag PASSED [  5%]
+tests/test_aisha_voice.py::TestFindMatchesInResponse::test_single_sentence PASSED [  6%]
+tests/test_aisha_voice.py::TestFindMatchesInResponse::test_multi_sentence PASSED [  6%]
+tests/test_aisha_voice.py::TestFindMatchesInResponse::test_empty_response PASSED [  7%]
+tests/test_aisha_voice.py::TestFindMatchesInResponse::test_no_match_response PASSED [  7%]
+tests/test_aisha_voice.py::TestGetGreeting::test_morning_greeting PASSED [  7%]
+tests/test_aisha_voice.py::TestGetGreeting::test_night_greeting PASSED   [  8%]
+tests/test_aisha_voice.py::TestGetGreeting::test_default_greeting PASSED [  8%]
+tests/test_aisha_voice.py::TestGetMenuItemAudio::test_find_menu_audio PASSED [  9%]
+tests/test_aisha_voice.py::TestGetMenuItemAudio::test_unknown_item_returns_none PASSED [  9%]
+tests/test_aisha_voice.py::TestStats::test_stats_returns_dict PASSED     [ 10%]
+tests/test_aisha_voice.py::TestStats::test_total_entries_correct PASSED  [ 10%]
+tests/test_aisha_voice.py::TestStats::test_all_fake_audio_found PASSED   [ 10%]
+tests/test_aisha_voice.py::TestGetAllEntries::test_returns_list PASSED   [ 11%]
+tests/test_aisha_voice.py::TestGetAllEntries::test_entries_have_fields PASSED [ 11%]
+tests/test_api_orders.py::TestHealthCheck::test_api_root ERROR           [ 12%]
+tests/test_api_orders.py::TestMenuEndpoint::test_get_menu_returns_200 ERROR [ 12%]
+tests/test_api_orders.py::TestMenuEndpoint::test_menu_has_categories ERROR [ 13%]
+tests/test_api_orders.py::TestMenuEndpoint::test_menu_items_have_required_fields ERROR [ 13%]
+tests/test_api_orders.py::TestMenuEndpoint::test_menu_prices_positive ERROR [ 14%]
+tests/test_api_orders.py::TestCreateOrder::test_create_order_success ERROR [ 14%]
+tests/test_api_orders.py::TestCreateOrder::test_create_order_invalid_menu_item ERROR [ 14%]
+tests/test_api_orders.py::TestCreateOrder::test_create_order_missing_fields ERROR [ 15%]
+tests/test_api_orders.py::TestCreateOrder::test_create_order_multiple_items ERROR [ 15%]
+tests/test_api_orders.py::TestGetOrder::test_get_existing_order ERROR    [ 16%]
+tests/test_api_orders.py::TestGetOrder::test_get_nonexistent_order ERROR [ 16%]
+tests/test_api_orders.py::TestCancelOrder::test_cancel_order_success ERROR [ 17%]
+tests/test_api_orders.py::TestCancelOrder::test_cancel_nonexistent_order ERROR [ 17%]
+tests/test_api_orders.py::TestConfirmPayment::test_confirm_payment_success ERROR [ 17%]
+tests/test_api_orders.py::TestUpdateOrderStatus::test_update_status ERROR [ 18%]
+tests/test_api_orders.py::TestSettings::test_get_existing_setting ERROR  [ 18%]
+tests/test_api_orders.py::TestSettings::test_get_nonexistent_setting ERROR [ 19%]
+tests/test_menu_validator.py::TestExactMatches::test_01_roti_canai PASSED [ 19%]
+tests/test_menu_validator.py::TestExactMatches::test_02_teh_tarik PASSED [ 20%]
+tests/test_menu_validator.py::TestExactMatches::test_03_nasi_goreng_kampung PASSED [ 20%]
+tests/test_menu_validator.py::TestExactMatches::test_04_maggi_goreng_kambing PASSED [ 21%]
+tests/test_menu_validator.py::TestExactMatches::test_05_milo_ais PASSED  [ 21%]
+tests/test_menu_validator.py::TestFuzzyMatches::test_06_roti_canai_misspelled PASSED [ 21%]
+tests/test_menu_validator.py::TestFuzzyMatches::test_07_mee_goreng_partial PASSED [ 22%]
+tests/test_menu_validator.py::TestFuzzyMatches::test_08_naan_cheese_garlic PASSED [ 22%]
+tests/test_menu_validator.py::TestFuzzyMatches::test_09_briyani_ayam_bawang_set PASSED [ 23%]
+tests/test_menu_validator.py::TestFuzzyMatches::test_10_kuey_teow_goreng PASSED [ 23%]
+tests/test_menu_validator.py::TestInvalidItems::test_11_pizza_rejected PASSED [ 24%]
+tests/test_menu_validator.py::TestInvalidItems::test_12_sushi_rejected PASSED [ 24%]
+tests/test_menu_validator.py::TestInvalidItems::test_13_gibberish_rejected PASSED [ 25%]
+tests/test_menu_validator.py::TestModifierValidation::test_14_kurang_manis_for_drink PASSED [ 25%]
+tests/test_menu_validator.py::TestModifierValidation::test_15_garing_for_roti PASSED [ 25%]
+tests/test_menu_validator.py::TestModifierValidation::test_16_kaw_for_drink PASSED [ 26%]
+tests/test_menu_validator.py::TestModifierValidation::test_16b_dinosaur_invalid_for_roti PASSED [ 26%]
+tests/test_menu_validator.py::TestFullPipelineValidation::test_17_typical_order PASSED [ 27%]
+tests/test_menu_validator.py::TestFullPipelineValidation::test_18_mixed_valid_invalid PASSED [ 27%]
+tests/test_menu_validator.py::TestEdgeCases::test_19_empty_order PASSED  [ 28%]
+tests/test_menu_validator.py::TestEdgeCases::test_20_duplicate_items_both_valid PASSED [ 28%]
+tests/test_menu_validator.py::TestCategoryDetection::test_drink_category PASSED [ 28%]
+tests/test_menu_validator.py::TestCategoryDetection::test_roti_category PASSED [ 29%]
+tests/test_menu_validator.py::TestCategoryDetection::test_noodle_category PASSED [ 29%]
+tests/test_menu_validator.py::TestCategoryDetection::test_nasi_category PASSED [ 30%]
+tests/test_menu_validator.py::TestCategoryDetection::test_naan_category PASSED [ 30%]
+tests/test_menu_validator.py::TestModifierWhitelist::test_drink_modifiers_present PASSED [ 31%]
+tests/test_menu_validator.py::TestModifierWhitelist::test_roti_modifiers_present PASSED [ 31%]
+tests/test_menu_validator.py::TestModifierWhitelist::test_noodle_modifiers_present PASSED [ 32%]
+tests/test_menu_validator.py::TestModifierWhitelist::test_global_modifiers_everywhere PASSED [ 32%]
+tests/test_menu_validator.py::TestMenuIntegrity::test_all_items_validate PASSED [ 32%]
+tests/test_menu_validator.py::TestMenuIntegrity::test_menu_has_drinks PASSED [ 33%]
+tests/test_menu_validator.py::TestMenuIntegrity::test_menu_has_roti PASSED [ 33%]
+tests/test_menu_validator.py::TestFuzzyPopularityTieBreak::test_teh_matches_teh_not_teh_o PASSED [ 34%]
+tests/test_order_engine.py::TestExtractItems::test_extract_roti_canai PASSED [ 34%]
+tests/test_order_engine.py::TestExtractItems::test_extract_naan_butter_garlic PASSED [ 35%]
+tests/test_order_engine.py::TestExtractItems::test_extract_maggi_goreng PASSED [ 35%]
+tests/test_order_engine.py::TestExtractItems::test_extract_mee_goreng PASSED [ 35%]
+tests/test_order_engine.py::TestExtractItems::test_greedy_roti_canai_susu PASSED [ 36%]
+tests/test_order_engine.py::TestExtractItems::test_greedy_naan_cheese_garlic PASSED [ 36%]
+tests/test_order_engine.py::TestExtractItems::test_greedy_maggi_goreng_kambing PASSED [ 37%]
+tests/test_order_engine.py::TestExtractItems::test_greedy_nasi_goreng_kampung PASSED [ 37%]
+tests/test_order_engine.py::TestExtractItems::test_greedy_briyani_ayam_bawang_set PASSED [ 38%]
+tests/test_order_engine.py::TestExtractItems::test_greedy_roti_telur_bawang PASSED [ 38%]
+tests/test_order_engine.py::TestExtractItems::test_extract_multiple_items PASSED [ 39%]
+tests/test_order_engine.py::TestExtractItems::test_extract_food_and_drink PASSED [ 39%]
+tests/test_order_engine.py::TestExtractItems::test_extract_empty_string PASSED [ 39%]
+tests/test_order_engine.py::TestExtractItems::test_extract_noise_only PASSED [ 40%]
+tests/test_order_engine.py::TestExtractItems::test_extract_unknown_item PASSED [ 40%]
+tests/test_order_engine.py::TestExtractItems::test_extract_handles_extra_whitespace PASSED [ 41%]
+tests/test_order_engine.py::TestQuantityParsing::test_satu PASSED        [ 41%]
+tests/test_order_engine.py::TestQuantityParsing::test_dua PASSED         [ 42%]
+tests/test_order_engine.py::TestQuantityParsing::test_tiga PASSED        [ 42%]
+tests/test_order_engine.py::TestQuantityParsing::test_empat PASSED       [ 42%]
+tests/test_order_engine.py::TestQuantityParsing::test_lima PASSED        [ 43%]
+tests/test_order_engine.py::TestQuantityParsing::test_numeric_digit PASSED [ 43%]
+tests/test_order_engine.py::TestQuantityParsing::test_default_qty_one PASSED [ 44%]
+tests/test_order_engine.py::TestQuantityParsing::test_quantity_before_item PASSED [ 44%]
+tests/test_order_engine.py::TestQuantityParsing::test_numeric_before_item PASSED [ 45%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[tu je] PASSED [ 45%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[tu jer] PASSED [ 46%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[itu je] PASSED [ 46%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[cukup] PASSED [ 46%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[dah] PASSED [ 47%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[habis] PASSED [ 47%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[sekian] PASSED [ 48%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[confirm] PASSED [ 48%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[settle] PASSED [ 49%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[setel] PASSED [ 49%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[sudah] PASSED [ 50%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[dah cukup] PASSED [ 50%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_detects_end_phrases[itu sahaja] PASSED [ 50%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_not_end_phrases[roti canai] PASSED [ 51%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_not_end_phrases[nak tambah lagi] PASSED [ 51%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_not_end_phrases[milo ais dua] PASSED [ 52%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_not_end_phrases[nasi goreng kampung] PASSED [ 52%]
+tests/test_order_engine.py::TestEndOfOrderDetection::test_not_end_phrases[ada lagi] PASSED [ 53%]
+tests/test_order_engine.py::TestProcess::test_process_single_item PASSED [ 53%]
+tests/test_order_engine.py::TestProcess::test_process_empty_input PASSED [ 53%]
+tests/test_order_engine.py::TestProcess::test_process_end_phrase_with_order PASSED [ 54%]
+tests/test_order_engine.py::TestProcess::test_process_end_phrase_empty_order PASSED [ 54%]
+tests/test_order_engine.py::TestProcess::test_process_gibberish PASSED   [ 55%]
+tests/test_order_engine.py::TestProcess::test_process_merges_into_existing_order PASSED [ 55%]
+tests/test_order_engine.py::TestProcess::test_process_increments_qty_on_duplicate PASSED [ 56%]
+tests/test_order_engine.py::TestProcess::test_process_audio_ids_present PASSED [ 56%]
+tests/test_order_engine.py::TestResponseBuilding::test_build_confirm_single PASSED [ 57%]
+tests/test_order_engine.py::TestResponseBuilding::test_build_confirm_multiple PASSED [ 57%]
+tests/test_order_engine.py::TestResponseBuilding::test_build_confirm_empty_order PASSED [ 57%]
+tests/test_order_engine.py::TestResponseBuilding::test_add_items_includes_ada_lagi PASSED [ 58%]
+tests/test_order_engine.py::TestGreeting::test_greeting_returns_dict PASSED [ 58%]
+tests/test_order_engine.py::TestGreeting::test_greeting_has_aisha PASSED [ 59%]
+tests/test_order_engine.py::TestAmbiguousItems::test_ayam_bawang_is_ambiguous PASSED [ 59%]
+tests/test_order_engine.py::TestAmbiguousItems::test_roti_canai_not_ambiguous_vs_susu PASSED [ 60%]
+tests/test_order_engine.py::TestAmbiguousItems::test_naan_biasa_not_ambiguous PASSED [ 60%]
+tests/test_order_engine.py::TestMenuData::test_menu_not_empty PASSED     [ 60%]
+tests/test_order_engine.py::TestMenuData::test_all_items_have_price PASSED [ 61%]
+tests/test_order_engine.py::TestMenuData::test_all_items_have_audio_id_key PASSED [ 61%]
+tests/test_order_engine.py::TestMenuData::test_sorted_keys_longest_first PASSED [ 62%]
+tests/test_order_engine.py::TestMenuData::test_malay_numbers_complete PASSED [ 62%]
+tests/test_promo.py::TestPromoCreate::test_create_promo_success ERROR    [ 63%]
+tests/test_promo.py::TestPromoCreate::test_create_duplicate_promo_fails ERROR [ 63%]
+tests/test_promo.py::TestPromoValidation::test_validate_existing_promo ERROR [ 64%]
+tests/test_promo.py::TestPromoValidation::test_invalid_code_rejected ERROR [ 64%]
+tests/test_promo.py::TestPromoValidation::test_expired_promo_rejected ERROR [ 64%]
+tests/test_promo.py::TestPromoValidation::test_min_order_not_met ERROR   [ 65%]
+tests/test_promo.py::TestPromoValidation::test_max_uses_enforced ERROR   [ 65%]
+tests/test_promo.py::TestPromoList::test_list_returns_array ERROR        [ 66%]
+tests/test_promo.py::TestAnalytics::test_daily_sales ERROR               [ 66%]
+tests/test_promo.py::TestAnalytics::test_weekly_sales ERROR              [ 67%]
+tests/test_promo.py::TestAnalytics::test_monthly_sales ERROR             [ 67%]
+tests/test_promo.py::TestPaymentEndpoints::test_get_tng_qr ERROR         [ 67%]
+tests/test_promo.py::TestPaymentEndpoints::test_get_grabpay_qr ERROR     [ 68%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_teh_o_ais_exact PASSED [ 68%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_roti_canai_misspelled PASSED [ 69%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_nasi_ayam_exact PASSED [ 69%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_ais_kosong_exact PASSED [ 70%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_milo_ais_fuzzy PASSED [ 70%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_nasi_ayam_sayur_exact PASSED [ 71%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_ayam_goreng_exact PASSED [ 71%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_maggi_goreng_misspelled PASSED [ 71%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_mee_goreng_mamak_exact PASSED [ 72%]
+tests/test_top_sellers.py::TestTopSellersFuzzyMatch::test_top_sellers_have_popularity PASSED [ 72%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_upsell_map_not_empty PASSED [ 73%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_all_base_items_exist_in_menu PASSED [ 73%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_all_upsell_items_exist_in_menu PASSED [ 74%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_all_margins_positive PASSED [ 74%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_upsells_sorted_by_highest_margin PASSED [ 75%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_upsell_prices_higher_than_base PASSED [ 75%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_suggestion_texts_are_casual_malay PASSED [ 75%]
+tests/test_upsell_engine.py::TestUpsellMapIntegrity::test_each_upsell_has_required_fields PASSED [ 76%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_get_upsell_maggi_goreng PASSED [ 76%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_get_upsell_roti_canai PASSED [ 77%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_get_upsell_nasi_goreng_biasa PASSED [ 77%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_get_upsell_mee_goreng PASSED [ 78%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_get_upsell_naan_biasa PASSED [ 78%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_get_upsell_sirap_ais PASSED [ 78%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_no_upsell_for_unknown_item PASSED [ 79%]
+tests/test_upsell_engine.py::TestUpsellEngine::test_upsell_result_has_suggestion_text PASSED [ 79%]
+tests/test_upsell_engine.py::TestSessionTracking::test_only_one_upsell_per_item PASSED [ 80%]
+tests/test_upsell_engine.py::TestSessionTracking::test_different_items_both_get_upsell PASSED [ 80%]
+tests/test_upsell_engine.py::TestSessionTracking::test_reset_session_allows_re_upsell PASSED [ 81%]
+tests/test_upsell_engine.py::TestSessionTracking::test_decline_prevents_re_upsell PASSED [ 81%]
+tests/test_upsell_engine.py::TestAcceptDecline::test_accept_valid_upsell PASSED [ 82%]
+tests/test_upsell_engine.py::TestAcceptDecline::test_accept_invalid_upsell PASSED [ 82%]
+tests/test_upsell_engine.py::TestAcceptDecline::test_accept_returns_audio_id PASSED [ 82%]
+tests/test_upsell_engine.py::TestPremiumAddon::test_premium_item_gets_addon PASSED [ 83%]
+tests/test_upsell_engine.py::TestPremiumAddon::test_premium_drink_gets_food_addon PASSED [ 83%]
+tests/test_upsell_engine.py::TestPremiumAddon::test_premium_items_set_not_empty PASSED [ 84%]
+tests/test_upsell_engine.py::TestGetAllUpsells::test_returns_list PASSED [ 84%]
+tests/test_upsell_engine.py::TestGetAllUpsells::test_all_options_have_margin PASSED [ 85%]
+tests/test_upsell_engine.py::TestGetAllUpsells::test_no_options_for_unknown PASSED [ 85%]
+tests/test_upsell_engine.py::TestGetAllUpsells::test_does_not_affect_session_tracking PASSED [ 85%]
+tests/test_upsell_engine.py::TestUpsellStats::test_stats_returns_dict PASSED [ 86%]
+tests/test_upsell_engine.py::TestUpsellStats::test_stats_positive_values PASSED [ 86%]
+tests/test_upsell_engine.py::TestUpsellStats::test_top_margins_sorted PASSED [ 87%]
+tests/test_upsell_engine.py::TestSingleton::test_get_upsell_engine_returns_same_instance PASSED [ 87%]
+tests/test_upsell_engine.py::TestElevenLabsTTS::test_tts_returns_none_without_api_key PASSED [ 88%]
+tests/test_upsell_engine.py::TestElevenLabsTTS::test_tts_calls_elevenlabs_api PASSED [ 88%]
+tests/test_upsell_engine.py::TestOrderEngineUpsellIntegration::test_process_includes_upsell PASSED [ 89%]
+tests/test_upsell_engine.py::TestOrderEngineUpsellIntegration::test_process_upsell_text_in_response PASSED [ 89%]
+tests/test_upsell_engine.py::TestOrderEngineUpsellIntegration::test_second_order_same_item_no_duplicate_upsell PASSED [ 89%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[5-morning] PASSED [ 90%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[6-morning] PASSED [ 90%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[10-morning] PASSED [ 91%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[11-morning] PASSED [ 91%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[12-afternoon] PASSED [ 92%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[13-afternoon] PASSED [ 92%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[14-afternoon] PASSED [ 92%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[15-evening] PASSED [ 93%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[17-evening] PASSED [ 93%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[18-evening] PASSED [ 94%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[19-night] PASSED [ 94%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[22-night] PASSED [ 95%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[0-night] PASSED [ 95%]
+tests/test_voice_ai.py::TestGetTimeOfDay::test_time_classification[3-night] PASSED [ 96%]
+tests/test_voice_ai.py::TestBuildSystemPrompt::test_prompt_contains_table_number PASSED [ 96%]
+tests/test_voice_ai.py::TestBuildSystemPrompt::test_prompt_contains_menu_context PASSED [ 96%]
+tests/test_voice_ai.py::TestBuildSystemPrompt::test_prompt_not_empty PASSED [ 97%]
+tests/test_voice_ai.py::TestBuildSystemPrompt::test_prompt_contains_rules PASSED [ 97%]
+tests/test_voice_ai.py::TestChatWithVoice::test_returns_dict_with_required_keys PASSED [ 98%]
+tests/test_voice_ai.py::TestChatWithVoice::test_handles_api_error_gracefully PASSED [ 98%]
+tests/test_voice_ai.py::TestChatWithVoice::test_empty_audio_matches_sets_has_audio_false PASSED [ 99%]
+tests/test_voice_ai.py::TestGetGreetingWithAudio::test_returns_dict PASSED [ 99%]
+tests/test_voice_ai.py::TestGetGreetingWithAudio::test_fallback_when_no_audio PASSED [100%]
+
+==================================== ERRORS ====================================
+_______________ ERROR at setup of TestHealthCheck.test_api_root ________________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+---------------------------- Captured stdout setup -----------------------------
+Menu items already exist, skipping insert.
+✅ Database initialized successfully with all 176 menu items!
+Starting database migration...
+Adding new columns to orders table...
+- payment_method column already exists
+- promo_code column already exists
+- discount_amount column already exists
+- estimated_time column already exists
+
+Adding note column to order_items table...
+- note column already exists in order_items
+
+Creating promo_codes table...
+✓ Created promo_codes table
+
+Creating payment_methods table...
+✓ Created payment_methods table
+
+Creating order_tracking table...
+✓ Created order_tracking table
+
+Inserting default promo codes...
+- Promo code WELCOME10 already exists
+- Promo code SAVE20 already exists
+- Promo code FIRST15 already exists
+- Promo code STUDENT10 already exists
+
+Inserting default payment methods...
+- Payment method maybank already exists
+- Payment method touchngo already exists
+- Payment method grabpay already exists
+
+Adding payment QR URL setting...
+- payment_qr_url setting already exists
+
+✅ Database migration completed successfully!
+Migration completed: restaurant_tables created, orders table updated.
+_________ ERROR at setup of TestMenuEndpoint.test_get_menu_returns_200 _________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestMenuEndpoint.test_menu_has_categories __________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+___ ERROR at setup of TestMenuEndpoint.test_menu_items_have_required_fields ____
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestMenuEndpoint.test_menu_prices_positive _________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestCreateOrder.test_create_order_success __________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+____ ERROR at setup of TestCreateOrder.test_create_order_invalid_menu_item _____
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+______ ERROR at setup of TestCreateOrder.test_create_order_missing_fields ______
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+______ ERROR at setup of TestCreateOrder.test_create_order_multiple_items ______
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+____________ ERROR at setup of TestGetOrder.test_get_existing_order ____________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+__________ ERROR at setup of TestGetOrder.test_get_nonexistent_order ___________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestCancelOrder.test_cancel_order_success __________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_______ ERROR at setup of TestCancelOrder.test_cancel_nonexistent_order ________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+______ ERROR at setup of TestConfirmPayment.test_confirm_payment_success _______
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+__________ ERROR at setup of TestUpdateOrderStatus.test_update_status __________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+___________ ERROR at setup of TestSettings.test_get_existing_setting ___________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestSettings.test_get_nonexistent_setting __________
+tests/test_api_orders.py:43: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestPromoCreate.test_create_promo_success __________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+---------------------------- Captured stdout setup -----------------------------
+Menu items already exist, skipping insert.
+✅ Database initialized successfully with all 176 menu items!
+Starting database migration...
+Adding new columns to orders table...
+- payment_method column already exists
+- promo_code column already exists
+- discount_amount column already exists
+- estimated_time column already exists
+
+Adding note column to order_items table...
+- note column already exists in order_items
+
+Creating promo_codes table...
+✓ Created promo_codes table
+
+Creating payment_methods table...
+✓ Created payment_methods table
+
+Creating order_tracking table...
+✓ Created order_tracking table
+
+Inserting default promo codes...
+- Promo code WELCOME10 already exists
+- Promo code SAVE20 already exists
+- Promo code FIRST15 already exists
+- Promo code STUDENT10 already exists
+
+Inserting default payment methods...
+- Payment method maybank already exists
+- Payment method touchngo already exists
+- Payment method grabpay already exists
+
+Adding payment QR URL setting...
+- payment_qr_url setting already exists
+
+✅ Database migration completed successfully!
+Migration completed: restaurant_tables created, orders table updated.
+_____ ERROR at setup of TestPromoCreate.test_create_duplicate_promo_fails ______
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+______ ERROR at setup of TestPromoValidation.test_validate_existing_promo ______
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_______ ERROR at setup of TestPromoValidation.test_invalid_code_rejected _______
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+______ ERROR at setup of TestPromoValidation.test_expired_promo_rejected _______
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestPromoValidation.test_min_order_not_met _________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________ ERROR at setup of TestPromoValidation.test_max_uses_enforced _________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+___________ ERROR at setup of TestPromoList.test_list_returns_array ____________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_______________ ERROR at setup of TestAnalytics.test_daily_sales _______________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+______________ ERROR at setup of TestAnalytics.test_weekly_sales _______________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+______________ ERROR at setup of TestAnalytics.test_monthly_sales ______________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+____________ ERROR at setup of TestPaymentEndpoints.test_get_tng_qr ____________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+__________ ERROR at setup of TestPaymentEndpoints.test_get_grabpay_qr __________
+tests/test_promo.py:28: in client
+    with patch("main.Thread") as mock_thread, \
+/usr/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+/usr/lib/python3.11/pkgutil.py:700: in resolve_name
+    mod = importlib.import_module(modname)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+main.py:17: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.15-final-0 _______________
+
+Name                    Stmts   Miss  Cover   Missing
+-----------------------------------------------------
+aisha_voice.py            135     33    76%   144, 214, 216, 218, 220, 222, 239-285, 294-296
+bot.py                     61     61     0%   1-137
+enhanced_routes.py        228    186    18%   57-59, 63-88, 96-193, 201-399, 407-464, 472-602, 610-621
+init_db.py                 23      3    87%   325-326, 343
+main.py                  1005    988     2%   18-2172
+menu_validator.py         144     34    76%   145, 206-212, 216-218, 254, 311, 324, 380-404, 409-423
+migrate_add_tables.py      22      1    95%   50
+migrate_database.py        77     16    79%   25, 35, 45, 55, 66, 130, 148, 159, 162-174, 179-181, 187
+order_engine.py           198     45    77%   372-377, 390-401, 538-572, 598, 622, 654-655, 693, 706-708
+split_audio.py            110    110     0%   16-182
+upsell_engine.py          107     10    91%   316, 323, 401-405, 530, 532, 544
+upsell_map.py              56     56     0%   15-373
+voice_ai.py                57     12    79%   22-30, 51, 123, 155
+-----------------------------------------------------
+TOTAL                    2223   1555    30%
+Coverage HTML written to dir coverage_report
+=========================== short test summary info ============================
+ERROR tests/test_api_orders.py::TestHealthCheck::test_api_root - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestMenuEndpoint::test_get_menu_returns_200 - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestMenuEndpoint::test_menu_has_categories - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestMenuEndpoint::test_menu_items_have_required_fields - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestMenuEndpoint::test_menu_prices_positive - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestCreateOrder::test_create_order_success - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestCreateOrder::test_create_order_invalid_menu_item - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestCreateOrder::test_create_order_missing_fields - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestCreateOrder::test_create_order_multiple_items - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestGetOrder::test_get_existing_order - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestGetOrder::test_get_nonexistent_order - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestCancelOrder::test_cancel_order_success - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestCancelOrder::test_cancel_nonexistent_order - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestConfirmPayment::test_confirm_payment_success - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestUpdateOrderStatus::test_update_status - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestSettings::test_get_existing_setting - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_api_orders.py::TestSettings::test_get_nonexistent_setting - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoCreate::test_create_promo_success - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoCreate::test_create_duplicate_promo_fails - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoValidation::test_validate_existing_promo - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoValidation::test_invalid_code_rejected - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoValidation::test_expired_promo_rejected - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoValidation::test_min_order_not_met - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoValidation::test_max_uses_enforced - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPromoList::test_list_returns_array - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestAnalytics::test_daily_sales - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestAnalytics::test_weekly_sales - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestAnalytics::test_monthly_sales - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPaymentEndpoints::test_get_tng_qr - ModuleNotFoundError: No module named 'telegram'
+ERROR tests/test_promo.py::TestPaymentEndpoints::test_get_grabpay_qr - ModuleNotFoundError: No module named 'telegram'
+======================== 198 passed, 30 errors in 8.42s ========================

@@ -34,7 +34,7 @@ class TestExactMatches:
         result = validate_menu_item("roti canai")
         assert result["valid"] is True
         assert result["item_key"] == "roti canai"
-        assert result["price"] == 2.00
+        assert result["price"] == 1.50  # updated price Apr 2026
 
     def test_02_teh_tarik(self):
         """Most popular drink: teh tarik"""
