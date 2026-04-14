@@ -63,6 +63,11 @@ SPEAKER_CHUNK = DEVICE_RATE // 10      # 4410 frames at 44.1kHz
 DEFAULT_MIC_INDEX = 1       # Microphone Array (Realtek)
 DEFAULT_SPEAKER_INDEX = 3   # Speakers (Realtek)
 
+# Voice: override with env var OMNI_VOICE
+# Available: Cherry, Ethan, Serena, Chelsie, Dylan, Jada, Sunny
+DEFAULT_VOICE = "Ethan"
+VOICE = os.getenv("OMNI_VOICE", DEFAULT_VOICE)
+
 SILENCE_THRESHOLD = 500     # RMS above this = audible speech
 
 PROMPT_FILE = os.path.join(REPO_ROOT, "aisha_omni_system_prompt.txt")
@@ -203,6 +208,7 @@ async def run_session(mic_idx: int, spk_idx: int):
     mic = MicCapture(mic_idx)
     print(f"[init] Mic device {mic_idx}: capture @ {DEVICE_RATE}Hz → resample to {OMNI_IN_RATE}Hz")
     print(f"[init] Spk device {spk_idx}: Omni {OMNI_OUT_RATE}Hz → resample to {DEVICE_RATE}Hz")
+    print(f"[init] Voice: {VOICE}")
     print(f"[init] Connecting to {WS_URL}")
 
     headers = {
@@ -228,7 +234,7 @@ async def run_session(mic_idx: int, spk_idx: int):
                 "session": {
                     "modalities": ["text", "audio"],
                     "instructions": system_prompt,
-                    "voice": "Cherry",
+                    "voice": VOICE,
                     "input_audio_format": "pcm16",
                     "output_audio_format": "pcm16",
                     "input_audio_transcription": {
