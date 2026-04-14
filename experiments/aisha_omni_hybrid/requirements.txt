@@ -1,0 +1,7 @@
+dashscope
+pyaudio
+websockets
+python-dotenv
+httpx
+requests
+audioop-lts; python_version >= "3.13"
