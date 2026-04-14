@@ -10,6 +10,10 @@ Device selection:
   - Set MIC_DEVICE_INDEX / SPEAKER_DEVICE_INDEX in .env, or
   - Pick interactively when prompted.
   - Defaults: input=1 (Microphone Array Realtek), output=3 (Speakers Realtek)
+
+Audio format (Omni spec):
+  - Input:  16kHz, 16-bit PCM, mono, base64-encoded
+  - Output: 24kHz, 16-bit PCM, mono
 """
 
 import asyncio
@@ -32,13 +36,16 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
 API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
-WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
+WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-omni-flash-realtime"
 MODEL = "qwen3.5-omni-realtime"
 
-RATE = 24000       # 24 kHz mono PCM16 — Omni default
+# Omni spec: input is 16kHz, output is 24kHz, both PCM16 mono
+RATE_IN = 16000
+RATE_OUT = 24000
 CHANNELS = 1
 FORMAT = pyaudio.paInt16
-CHUNK = 2400       # 100 ms frames at 24 kHz
+CHUNK_IN = 1600          # 100 ms frames at 16 kHz
+CHUNK_OUT = 2400         # 100 ms frames at 24 kHz
 
 DEFAULT_MIC_INDEX = 1       # Microphone Array (Realtek)
 DEFAULT_SPEAKER_INDEX = 3   # Speakers (Realtek)
@@ -64,14 +71,12 @@ def load_system_prompt() -> str:
 # ── Device selection ──────────────────────────────────────────────────────────
 
 def list_audio_devices():
-    """Print all audio devices with index numbers."""
     pa = pyaudio.PyAudio()
     count = pa.get_device_count()
     print(f"\n{'='*60}")
     print(f"  Audio Devices ({count} found)")
     print(f"{'='*60}")
-    inputs = []
-    outputs = []
+    inputs, outputs = [], []
     for i in range(count):
         info = pa.get_device_info_by_index(i)
         name = info.get("name", "Unknown")
@@ -92,13 +97,11 @@ def list_audio_devices():
 
 
 def pick_device(direction: str, env_var: str, default: int, valid_indices: list) -> int:
-    """Resolve device index from env var, interactive prompt, or default."""
     env_val = os.getenv(env_var)
     if env_val is not None:
         idx = int(env_val)
         print(f"  {direction} device from {env_var}: [{idx}]")
         return idx
-
     prompt = f"  Pick {direction} device index [{default}]: "
     raw = input(prompt).strip()
     if raw == "":
@@ -112,7 +115,6 @@ def pick_device(direction: str, env_var: str, default: int, valid_indices: list)
 # ── Audio helpers ─────────────────────────────────────────────────────────────
 
 def rms(pcm_bytes: bytes) -> float:
-    """Compute RMS amplitude of PCM16 audio."""
     n = len(pcm_bytes) // 2
     if n == 0:
         return 0.0
@@ -122,13 +124,12 @@ def rms(pcm_bytes: bytes) -> float:
 
 class AudioPlayer:
     """Plays raw PCM16-24kHz chunks via PyAudio."""
-
     def __init__(self, device_index: int):
         self._pa = pyaudio.PyAudio()
         self._stream = self._pa.open(
-            format=FORMAT, channels=CHANNELS, rate=RATE, output=True,
+            format=FORMAT, channels=CHANNELS, rate=RATE_OUT, output=True,
             output_device_index=device_index,
-            frames_per_buffer=CHUNK,
+            frames_per_buffer=CHUNK_OUT,
         )
         self.device_index = device_index
 
@@ -142,19 +143,18 @@ class AudioPlayer:
 
 
 class MicCapture:
-    """Captures mic audio as PCM16-24kHz chunks."""
-
+    """Captures mic audio as PCM16-16kHz chunks."""
     def __init__(self, device_index: int):
         self._pa = pyaudio.PyAudio()
         self._stream = self._pa.open(
-            format=FORMAT, channels=CHANNELS, rate=RATE, input=True,
+            format=FORMAT, channels=CHANNELS, rate=RATE_IN, input=True,
             input_device_index=device_index,
-            frames_per_buffer=CHUNK,
+            frames_per_buffer=CHUNK_IN,
         )
         self.device_index = device_index
 
     def read_chunk(self) -> bytes:
-        return self._stream.read(CHUNK, exception_on_overflow=False)
+        return self._stream.read(CHUNK_IN, exception_on_overflow=False)
 
     def close(self):
         self._stream.stop_stream()
@@ -174,17 +174,16 @@ async def run_session(mic_idx: int, spk_idx: int):
 
     player = AudioPlayer(spk_idx)
     mic = MicCapture(mic_idx)
-    print(f"[init] Listening on device {mic_idx}")
-    print(f"[init] Playing on device {spk_idx}")
-    print(f"[init] Connecting to {MODEL} ...")
+    print(f"[init] Listening on device {mic_idx} @ {RATE_IN}Hz mono PCM16")
+    print(f"[init] Playing on device {spk_idx} @ {RATE_OUT}Hz mono PCM16")
+    print(f"[init] Connecting to {WS_URL}")
 
     headers = {
-        "Authorization": f"bearer {API_KEY}",
+        "Authorization": f"Bearer {API_KEY}",
     }
 
     stop = asyncio.Event()
 
-    # Handle Ctrl+C
     loop = asyncio.get_running_loop()
     if sys.platform == "win32":
         signal.signal(signal.SIGINT, lambda s, f: stop.set())
@@ -194,39 +193,41 @@ async def run_session(mic_idx: int, spk_idx: int):
 
     try:
         async with websockets.connect(WS_URL, additional_headers=headers) as ws:
-            # ── 1. Send session.update to configure the model ─────────────
+            print("[ws] connected")
+
+            # ── 1. session.update — server VAD auto-commits + auto-creates response
             session_update = {
                 "type": "session.update",
                 "session": {
-                    "model": MODEL,
                     "modalities": ["text", "audio"],
                     "instructions": system_prompt,
                     "voice": "Cherry",
                     "input_audio_format": "pcm16",
                     "output_audio_format": "pcm16",
+                    "input_audio_transcription": {
+                        "model": "gummy-realtime-v1",
+                    },
                     "turn_detection": {
                         "type": "server_vad",
-                        "silence_duration_ms": 800,
+                        "threshold": 0.5,
+                        "silence_duration_ms": 700,
+                        "prefix_padding_ms": 300,
                     },
                 },
             }
             await ws.send(json.dumps(session_update))
-            print("[init] Session config sent. Speak into your mic!\n")
+            print(f"[send] session.update  vad=server_vad threshold=0.5 silence=700ms")
+            print("[init] Speak into your mic!\n")
 
-            # ── 2. Mic streaming task ─────────────────────────────────────
-            last_dot_time = 0.0
+            # ── 2. Mic streaming task (no commit/response.create — server VAD handles it)
+            bytes_sent = 0
+            last_log = time.monotonic()
 
             async def stream_mic():
-                nonlocal last_dot_time
+                nonlocal bytes_sent, last_log
                 while not stop.is_set():
                     pcm = await loop.run_in_executor(None, mic.read_chunk)
-                    # Audio level indicator — print . every ~1s when above silence
                     level = rms(pcm)
-                    now = time.monotonic()
-                    if level > SILENCE_THRESHOLD and now - last_dot_time >= 1.0:
-                        print(".", end="", flush=True)
-                        last_dot_time = now
-
                     audio_b64 = base64.b64encode(pcm).decode("ascii")
                     msg = {
                         "type": "input_audio_buffer.append",
@@ -234,10 +235,18 @@ async def run_session(mic_idx: int, spk_idx: int):
                     }
                     try:
                         await ws.send(json.dumps(msg))
+                        bytes_sent += len(pcm)
                     except websockets.ConnectionClosed:
+                        print("[ws] closed during send")
                         break
 
-            # ── 3. Receive events task ────────────────────────────────────
+                    now = time.monotonic()
+                    if now - last_log >= 1.0:
+                        marker = "*" if level > SILENCE_THRESHOLD else " "
+                        print(f"[mic] sent {bytes_sent} bytes  rms={level:6.0f} {marker}")
+                        last_log = now
+
+            # ── 3. Receive events task
             async def receive_events():
                 transcript_parts = []
                 async for raw in ws:
@@ -246,45 +255,64 @@ async def run_session(mic_idx: int, spk_idx: int):
                     try:
                         evt = json.loads(raw)
                     except json.JSONDecodeError:
+                        print(f"[recv] non-JSON: {raw[:120]}")
                         continue
 
-                    etype = evt.get("type", "")
+                    etype = evt.get("type", "?")
 
-                    # Audio delta — play it
+                    # Always log event type
+                    if etype not in ("response.audio.delta", "response.audio_transcript.delta"):
+                        print(f"[evt] {etype}")
+
                     if etype == "response.audio.delta":
                         audio_b64 = evt.get("delta", "")
                         if audio_b64:
                             pcm = base64.b64decode(audio_b64)
+                            print(f"[recv] got audio chunk ({len(pcm)} bytes)")
                             player.play(pcm)
 
-                    # Text / transcript delta — accumulate
                     elif etype == "response.audio_transcript.delta":
                         chunk = evt.get("delta", "")
                         if chunk:
-                            print(chunk, end="", flush=True)
                             transcript_parts.append(chunk)
+                            print(f"[recv] got text: {chunk!r}")
 
-                    # Transcript done
                     elif etype == "response.audio_transcript.done":
                         transcript = evt.get("transcript", "".join(transcript_parts))
                         print(f"\n[Aisha] {transcript}\n")
                         transcript_parts.clear()
 
-                    # Input transcript (what user said)
                     elif etype == "conversation.item.input_audio_transcription.completed":
                         user_text = evt.get("transcript", "")
-                        if user_text:
-                            print(f"[You]   {user_text}")
+                        print(f"[You]   {user_text}")
 
-                    # Errors
+                    elif etype == "input_audio_buffer.speech_started":
+                        print("[vad] speech_started")
+
+                    elif etype == "input_audio_buffer.speech_stopped":
+                        print("[vad] speech_stopped")
+
+                    elif etype == "input_audio_buffer.committed":
+                        print(f"[vad] buffer committed (item_id={evt.get('item_id')})")
+
+                    elif etype == "response.created":
+                        print(f"[resp] created (id={evt.get('response', {}).get('id')})")
+
+                    elif etype == "response.done":
+                        status = evt.get("response", {}).get("status")
+                        print(f"[resp] done (status={status})")
+                        if status == "failed":
+                            print(f"       details: {evt.get('response')}")
+
                     elif etype == "error":
-                        print(f"[error] {evt.get('error', evt)}")
+                        print(f"[ERROR] {json.dumps(evt.get('error', evt), ensure_ascii=False)}")
 
-                    # Session created / updated
                     elif etype in ("session.created", "session.updated"):
-                        print(f"[{etype}] OK")
+                        sess = evt.get("session", {})
+                        print(f"       voice={sess.get('voice')} "
+                              f"in_fmt={sess.get('input_audio_format')} "
+                              f"out_fmt={sess.get('output_audio_format')}")
 
-            # ── Run both tasks until Ctrl+C ───────────────────────────────
             mic_task = asyncio.create_task(stream_mic())
             recv_task = asyncio.create_task(receive_events())
             await stop.wait()
@@ -294,7 +322,7 @@ async def run_session(mic_idx: int, spk_idx: int):
     except websockets.InvalidStatusCode as e:
         print(f"[error] WebSocket rejected: {e}")
     except Exception as e:
-        print(f"[error] {e}")
+        print(f"[error] {type(e).__name__}: {e}")
     finally:
         mic.close()
         player.close()
@@ -305,7 +333,7 @@ async def run_session(mic_idx: int, spk_idx: int):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  Khulafa Bistro — Aisha Omni Voice Test")
+    print("  Khulafa Bistro — Aisha Omni Voice Test (debug v3)")
     print("  Ctrl+C to exit")
     print("=" * 60)
 
