@@ -30,6 +30,12 @@ import pyaudio
 import websockets
 from dotenv import load_dotenv
 
+# audioop was removed in Python 3.13+ — fall back to the pyaudioop backport
+try:
+    import audioop
+except ImportError:
+    import pyaudioop as audioop  # pip install audioop-lts
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -39,13 +45,20 @@ API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-omni-flash-realtime"
 MODEL = "qwen3.5-omni-realtime"
 
-# Omni spec: input is 16kHz, output is 24kHz, both PCM16 mono
-RATE_IN = 16000
-RATE_OUT = 24000
+# Omni spec: input is 16kHz, output is 24kHz, both PCM16 mono.
+# Mic/speaker devices often don't support those rates natively, so we
+# run the hardware at 44.1kHz and resample both directions.
+OMNI_IN_RATE = 16000      # what we SEND to Omni
+OMNI_OUT_RATE = 24000     # what Omni SENDS back
+DEVICE_RATE = 44100       # native mic/speaker rate
+
+SAMPLE_WIDTH = 2          # 16-bit PCM
 CHANNELS = 1
 FORMAT = pyaudio.paInt16
-CHUNK_IN = 1600          # 100 ms frames at 16 kHz
-CHUNK_OUT = 2400         # 100 ms frames at 24 kHz
+
+# 100 ms frames
+MIC_CHUNK = DEVICE_RATE // 10          # 4410 frames at 44.1kHz
+SPEAKER_CHUNK = DEVICE_RATE // 10      # 4410 frames at 44.1kHz
 
 DEFAULT_MIC_INDEX = 1       # Microphone Array (Realtek)
 DEFAULT_SPEAKER_INDEX = 3   # Speakers (Realtek)
@@ -123,18 +136,24 @@ def rms(pcm_bytes: bytes) -> float:
 
 
 class AudioPlayer:
-    """Plays raw PCM16-24kHz chunks via PyAudio."""
+    """Plays 24kHz PCM16 from Omni by resampling up to 44.1kHz hardware rate."""
     def __init__(self, device_index: int):
         self._pa = pyaudio.PyAudio()
         self._stream = self._pa.open(
-            format=FORMAT, channels=CHANNELS, rate=RATE_OUT, output=True,
+            format=FORMAT, channels=CHANNELS, rate=DEVICE_RATE, output=True,
             output_device_index=device_index,
-            frames_per_buffer=CHUNK_OUT,
+            frames_per_buffer=SPEAKER_CHUNK,
         )
         self.device_index = device_index
+        # Stateful resampler: Omni 24kHz → device 44.1kHz
+        self._rs_state = None
 
-    def play(self, pcm_bytes: bytes):
-        self._stream.write(pcm_bytes)
+    def play(self, pcm_bytes_24k: bytes):
+        pcm_44k, self._rs_state = audioop.ratecv(
+            pcm_bytes_24k, SAMPLE_WIDTH, CHANNELS,
+            OMNI_OUT_RATE, DEVICE_RATE, self._rs_state,
+        )
+        self._stream.write(pcm_44k)
 
     def close(self):
         self._stream.stop_stream()
@@ -143,18 +162,26 @@ class AudioPlayer:
 
 
 class MicCapture:
-    """Captures mic audio as PCM16-16kHz chunks."""
+    """Captures mic at 44.1kHz then resamples down to 16kHz for Omni."""
     def __init__(self, device_index: int):
         self._pa = pyaudio.PyAudio()
         self._stream = self._pa.open(
-            format=FORMAT, channels=CHANNELS, rate=RATE_IN, input=True,
+            format=FORMAT, channels=CHANNELS, rate=DEVICE_RATE, input=True,
             input_device_index=device_index,
-            frames_per_buffer=CHUNK_IN,
+            frames_per_buffer=MIC_CHUNK,
         )
         self.device_index = device_index
+        # Stateful resampler: device 44.1kHz → Omni 16kHz
+        self._rs_state = None
 
     def read_chunk(self) -> bytes:
-        return self._stream.read(CHUNK_IN, exception_on_overflow=False)
+        """Return a chunk of 16kHz PCM16 ready for Omni."""
+        raw_44k = self._stream.read(MIC_CHUNK, exception_on_overflow=False)
+        pcm_16k, self._rs_state = audioop.ratecv(
+            raw_44k, SAMPLE_WIDTH, CHANNELS,
+            DEVICE_RATE, OMNI_IN_RATE, self._rs_state,
+        )
+        return pcm_16k
 
     def close(self):
         self._stream.stop_stream()
@@ -174,8 +201,8 @@ async def run_session(mic_idx: int, spk_idx: int):
 
     player = AudioPlayer(spk_idx)
     mic = MicCapture(mic_idx)
-    print(f"[init] Listening on device {mic_idx} @ {RATE_IN}Hz mono PCM16")
-    print(f"[init] Playing on device {spk_idx} @ {RATE_OUT}Hz mono PCM16")
+    print(f"[init] Mic device {mic_idx}: capture @ {DEVICE_RATE}Hz → resample to {OMNI_IN_RATE}Hz")
+    print(f"[init] Spk device {spk_idx}: Omni {OMNI_OUT_RATE}Hz → resample to {DEVICE_RATE}Hz")
     print(f"[init] Connecting to {WS_URL}")
 
     headers = {

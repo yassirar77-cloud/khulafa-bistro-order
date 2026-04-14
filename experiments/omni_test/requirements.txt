@@ -2,3 +2,4 @@ dashscope
 pyaudio
 websockets
 python-dotenv
+audioop-lts; python_version >= "3.13"
