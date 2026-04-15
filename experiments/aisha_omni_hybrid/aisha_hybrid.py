@@ -190,12 +190,15 @@ class Speaker:
         self._pa.terminate()
 
 
-# ── ElevenLabs TTS streaming ──────────────────────────────────────────────────
+# ── ElevenLabs TTS streaming (optional) ───────────────────────────────────────
 
-async def tts_stream_and_play(text: str, speaker: Speaker):
-    """Stream PCM from ElevenLabs straight into the speaker."""
-    if not ELEVEN_KEY or not ELEVEN_VOICE:
-        print("[tts] ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID missing — skipping audio")
+TTS_ENABLED = bool(ELEVEN_KEY and ELEVEN_VOICE)
+
+
+async def tts_stream_and_play(text: str, speaker: Speaker | None):
+    """Stream PCM from ElevenLabs into speaker. If TTS disabled, print only."""
+    if not TTS_ENABLED:
+        print(f"\n[AISHA]: {text}\n")
         return
 
     url = ELEVEN_STREAM_URL.format(voice=ELEVEN_VOICE)
@@ -227,11 +230,18 @@ async def tts_stream_and_play(text: str, speaker: Speaker):
     print(f"[tts] played {total} bytes in {dt:.2f}s")
 
 
-# ── Telegram ──────────────────────────────────────────────────────────────────
+# ── Telegram (optional) ───────────────────────────────────────────────────────
+
+TELEGRAM_ENABLED = bool(TG_BOT)
+
 
 def send_telegram(text: str):
-    if not TG_BOT:
-        print("[tg]  TELEGRAM_BOT_TOKEN missing — skipping")
+    if not TELEGRAM_ENABLED:
+        print("\n" + "=" * 60)
+        print("  [TELEGRAM DISABLED — order would be sent to chat:", TG_CHAT, "]")
+        print("=" * 60)
+        print(text)
+        print("=" * 60 + "\n")
         return
     url = f"https://api.telegram.org/bot{TG_BOT}/sendMessage"
     try:
@@ -281,14 +291,17 @@ async def run(mic_idx: int, spk_idx: int):
         sys.exit(1)
 
     print(f"[init] validator   : {VALIDATOR}")
-    print(f"[init] elevenlabs  : voice={ELEVEN_VOICE or '(unset)'}  key={'set' if ELEVEN_KEY else 'UNSET'}")
-    print(f"[init] telegram    : chat={TG_CHAT}  token={'set' if TG_BOT else 'UNSET'}")
+    print(f"[init] elevenlabs  : {'ON  (voice=' + ELEVEN_VOICE + ')' if TTS_ENABLED else 'OFF (text-only output)'}")
+    print(f"[init] telegram    : {'ON  (chat=' + str(TG_CHAT) + ')' if TELEGRAM_ENABLED else 'OFF (orders print to terminal)'}")
     print(f"[init] mic device  : {mic_idx} @ {DEVICE_RATE}Hz → resample {OMNI_IN_RATE}Hz")
-    print(f"[init] spk device  : {spk_idx} @ {DEVICE_RATE}Hz ← ElevenLabs {ELEVEN_OUT_RATE}Hz")
+    if TTS_ENABLED:
+        print(f"[init] spk device  : {spk_idx} @ {DEVICE_RATE}Hz ← ElevenLabs {ELEVEN_OUT_RATE}Hz")
+    else:
+        print("[init] spk device  : (none — TTS disabled)")
 
     prompt = load_prompt()
     mic = MicCapture(mic_idx)
-    spk = Speaker(spk_idx)
+    spk = Speaker(spk_idx) if TTS_ENABLED else None
     cart: list[dict] = []
 
     stop = asyncio.Event()
@@ -410,7 +423,8 @@ async def run(mic_idx: int, spk_idx: int):
         print(f"[error] {type(e).__name__}: {e}")
     finally:
         mic.close()
-        spk.close()
+        if spk is not None:
+            spk.close()
         print("\n[exit] Bye!")
 
 
