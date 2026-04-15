@@ -15,14 +15,17 @@ Usage:  python aisha_hybrid.py
 Stop:   Ctrl+C
 """
 
+# Make the repo root importable BEFORE anything else so we can pull in
+# the production menu_validator + order_engine.
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 import asyncio
 import base64
 import json
 import math
-import os
 import signal
 import struct
-import sys
 import time
 
 import pyaudio
@@ -78,7 +81,7 @@ try:
                       "modifiers": []} for i in items]
         return _validate_items(extracted)
 
-    VALIDATOR = "menu_validator"
+    VALIDATOR = f"LOADED {len(MENU)} items"
 except Exception as e:
     from order_engine import MENU  # fallback — MENU dict only
 
@@ -113,15 +116,23 @@ nasi lemak bungkus RM2.60, telur mata RM1.50, telur masin RM1.50,
 nasi putih RM2.33, roti bakar RM2.50, nasi ayam bawang sayur RM11.00.
 
 RESPONSE FORMAT — always reply in EXACT JSON, nothing else:
-{"items": ["roti canai"], "action": "add_items", "reply": "Roti canai satu!"}
+{"items": ["nasi goreng daging"], "action": "add_items", "reply": "Nasi goreng daging satu!"}
 
 Actions:
   - add_items: customer ordered items
   - confirm_order: customer said "tu je" / "cukup" / "dah" / "confirm" / "settle"
   - unclear: cannot understand, ask to repeat
 
+CRITICAL — EXTRACT, DO NOT SUBSTITUTE:
+  - Extract items EXACTLY as customer says them. Output the LITERAL words used.
+  - NEVER substitute "daging" with "ayam". NEVER substitute "kambing" with "kampung".
+  - NEVER swap ingredients for similar-sounding menu items.
+  - If customer says "nasi goreng daging", items MUST be ["nasi goreng daging"],
+    NOT ["nasi goreng ayam"]. The validator matches to the real menu separately.
+  - When unsure, keep the customer's words verbatim — do not auto-correct.
+
 Rules:
-  - item names MUST be lowercase, exact menu match
+  - item names MUST be lowercase, use customer's literal words
   - "reply" is what Aisha says (spoken via TTS) — keep SHORT, max 2 ayat
   - no text outside the JSON
 """
