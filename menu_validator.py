@@ -24,41 +24,79 @@ from order_engine import MENU, _SORTED_KEYS
 # WHISPER PROMPT — Malaysian F&B vocabulary bias
 # ================================================================
 # Whisper's `prompt` parameter accepts up to 224 tokens of prior context
-# that biases acoustic decoding toward the supplied vocabulary. We pin
-# the top 25 items by sales popularity plus a small set of disambiguation
-# anchors whose sales data under-counts them (hot/cold variants, iconic
-# drinks) so Whisper hears the distinguishing words.
+# that biases acoustic decoding toward the supplied vocabulary. We combine
+# the top 15 food items by sales popularity (drinks and obvious sub-variants
+# excluded) with an explicit PINNED_ITEMS list of drinks so Whisper hears
+# the distinguishing words even when POS popularity under-counts them.
 #
 # Editors: to add an item, put it in PINNED_ITEMS and run the test suite
 # (tests/test_whisper_prompt.py) — the token-budget test will fail if
 # the combined prompt exceeds the 224-token ceiling.
 
+# Drinks are excluded from the top-N food slice and instead pinned
+# explicitly below. Detection is a simple keyword match on the item name.
+DRINK_KEYWORDS = ["teh", "kopi", "milo", "ais", "air", "limau", "bandung",
+                  "sirap", "nescafe", "horlick", "jus", "extra joss", "cincau", "barli"]
+
+
+def is_drink(name: str) -> bool:
+    return any(kw in name.lower() for kw in DRINK_KEYWORDS)
+
+
+# Food sub-variants whose root form is already present in the top-N slice.
+# Whisper biases on the root; dropping these frees tokens without losing
+# coverage (the validator still resolves the full variant via MENU).
+SKIP_FOOD_VARIANTS = {
+    "nasi ayam sayur",          # root: nasi ayam
+    "nasi ayam bawang sayur",   # root: nasi ayam bawang
+    "maggi goreng telur mata",  # root: maggi goreng
+}
+
+
+# PINNED_ITEMS: manually pinned because MENU popularity data has a
+# known import bug where hot drinks and iconic drinks (teh tarik,
+# kopi panas, milo panas) show popularity=0 despite being common.
+# Drinks need explicit pinning since they are short, acoustically
+# similar words that Whisper frequently substitutes without biasing.
+# See follow-up PR: "fix: reconcile hot/iced and tarik/plain
+# popularity split from POS import"
 PINNED_ITEMS = [
-    "teh tarik",          # iconic; acoustic collision with "teh" / "teh ais"
-    "kopi ais",           # entire kopi family otherwise absent from top 25
-    "kopi panas",         # completes kopi hot/cold pair
-    "milo panas",         # completes milo hot/cold (milo ais is in top 25)
-    "nasi goreng biasa",  # plain-form anchor vs kampung/ayam variants
+    # Teh family
+    "teh tarik", "teh ais", "teh o", "teh o ais",
+    # Kopi family
+    "kopi ais", "kopi o", "kopi o ais", "kopi panas",
+    # Milo family
+    "milo ais", "milo panas",
+    # Water
+    "ais kosong", "air suam",
+    # Other drinks
+    "limau ais", "nescafe",
+    # Food anchor
+    "nasi goreng biasa",
 ]
 
 
 def _compute_whisper_prompt() -> str:
     """Build the Malay F&B vocabulary prompt from MENU + PINNED_ITEMS.
 
-    Combines the top 25 items by popularity with PINNED_ITEMS (deduped,
-    order-preserving) and appends a short modifier vocabulary. Result is
-    cached at module load by WHISPER_PROMPT below.
+    Takes the top 15 food items by popularity (drinks and known sub-variants
+    excluded), appends PINNED_ITEMS, dedupes preserving order, and adds the
+    modifier vocabulary suffix. Cached at module load by WHISPER_PROMPT below.
     """
-    top25 = sorted(
-        MENU.items(),
-        key=lambda kv: kv[1].get("popularity", 0),
+    food_items = sorted(
+        (
+            (name, meta.get("popularity", 0))
+            for name, meta in MENU.items()
+            if not is_drink(name) and name not in SKIP_FOOD_VARIANTS
+        ),
+        key=lambda kv: kv[1],
         reverse=True,
-    )[:25]
-    top_names = [name for name, _ in top25]
+    )[:15]
+    top_food_names = [name for name, _ in food_items]
 
     combined: list[str] = []
     seen: set[str] = set()
-    for name in top_names + PINNED_ITEMS:
+    for name in top_food_names + PINNED_ITEMS:
         if name not in seen:
             combined.append(name)
             seen.add(name)
