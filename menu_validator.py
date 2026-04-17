@@ -21,6 +21,65 @@ from order_engine import MENU, _SORTED_KEYS
 
 
 # ================================================================
+# WHISPER PROMPT — Malaysian F&B vocabulary bias
+# ================================================================
+# Whisper's `prompt` parameter accepts up to 224 tokens of prior context
+# that biases acoustic decoding toward the supplied vocabulary. We pin
+# the top 25 items by sales popularity plus a small set of disambiguation
+# anchors whose sales data under-counts them (hot/cold variants, iconic
+# drinks) so Whisper hears the distinguishing words.
+#
+# Editors: to add an item, put it in PINNED_ITEMS and run the test suite
+# (tests/test_whisper_prompt.py) — the token-budget test will fail if
+# the combined prompt exceeds the 224-token ceiling.
+
+PINNED_ITEMS = [
+    "teh tarik",          # iconic; acoustic collision with "teh" / "teh ais"
+    "kopi ais",           # entire kopi family otherwise absent from top 25
+    "kopi panas",         # completes kopi hot/cold pair
+    "milo panas",         # completes milo hot/cold (milo ais is in top 25)
+    "nasi goreng biasa",  # plain-form anchor vs kampung/ayam variants
+]
+
+
+def _compute_whisper_prompt() -> str:
+    """Build the Malay F&B vocabulary prompt from MENU + PINNED_ITEMS.
+
+    Combines the top 25 items by popularity with PINNED_ITEMS (deduped,
+    order-preserving) and appends a short modifier vocabulary. Result is
+    cached at module load by WHISPER_PROMPT below.
+    """
+    top25 = sorted(
+        MENU.items(),
+        key=lambda kv: kv[1].get("popularity", 0),
+        reverse=True,
+    )[:25]
+    top_names = [name for name, _ in top25]
+
+    combined: list[str] = []
+    seen: set[str] = set()
+    for name in top_names + PINNED_ITEMS:
+        if name not in seen:
+            combined.append(name)
+            seen.add(name)
+
+    return (
+        "Menu Khulafa Bistro Malaysia: "
+        + ", ".join(combined)
+        + ". Modifiers: ais, panas, kurang manis, takeaway, tambah, kurang."
+    )
+
+
+# Cached at module load — input (MENU + PINNED_ITEMS) doesn't change per request.
+WHISPER_PROMPT: str = _compute_whisper_prompt()
+
+
+def get_whisper_prompt() -> str:
+    """Return the cached Whisper vocabulary prompt (<224 tokens)."""
+    return WHISPER_PROMPT
+
+
+# ================================================================
 # MODIFIER WHITELIST — per category
 # ================================================================
 

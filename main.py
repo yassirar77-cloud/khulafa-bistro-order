@@ -21,7 +21,7 @@ from openai import OpenAI
 from upsell_engine import get_upsell_engine, generate_upsell_audio, UPSELL_MAP
 from upsell_map import (get_upsell_audio, get_upsell_audio_path, get_upsell_audio_info,
                         UPSELL_AUDIO_MAP, get_combo_cross_sell, get_general_response_audio)
-from menu_validator import validate_order_items, validate_menu_item, log_order_pipeline, get_recent_logs
+from menu_validator import validate_order_items, validate_menu_item, log_order_pipeline, get_recent_logs, get_whisper_prompt
 
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
@@ -73,48 +73,7 @@ def transcribe_audio(audio_file_path):
             model="whisper-1",
             file=audio_file,
             language="ms",
-            prompt=(
-                "Pelanggan sedang membuat pesanan makanan di restoran Khulafa. "
-                "Menu kami: roti canai, roti canai susu, roti telur, roti telur bawang, "
-                "roti telur cheese, roti sardin, roti khawin, roti boom, roti boom kaya, "
-                "roti tissue, roti pisang, roti pisang cheese, roti planta, roti cheese, "
-                "roti bawang, roti jantan, roti special, roti special double, roti milo, "
-                "roti kaya, roti bakar, roti bakar kaya, roti bakar cheese, "
-                "murtabak ayam, murtabak daging, murtabak kambing, "
-                "naan biasa, naan cheese, naan garlic, naan butter, naan butter garlic, "
-                "naan cheese garlic, naan cheese double, naan mozzerella cheese, "
-                "naan mumtaj, naan tajmahal, "
-                "nasi ayam, nasi ayam bawang, nasi ayam sayur, nasi ayam bawang sayur, "
-                "nasi ayam rendang, nasi putih, nasi daging, nasi lemak bungkus, "
-                "briyani ayam, briyani ayam bawang, briyani ayam bawang set, "
-                "briyani ayam goreng set, briyani kambing, briyani kambing set, "
-                "briyani daging set, briyani lamb shank, "
-                "nasi goreng kampung, nasi goreng biasa, nasi goreng mamak, "
-                "nasi goreng pattaya, nasi goreng seafood, nasi goreng ayam, "
-                "maggi goreng, maggi goreng mamak, maggi goreng basa, maggi goreng ayam, "
-                "maggi goreng daging, maggi goreng kambing, maggi goreng telur mata, "
-                "maggi tomyam, maggi sup, "
-                "mee goreng, mee goreng mamak, mee goreng ayam, mee goreng daging, "
-                "mee goreng seafood, mee goreng telur mata, mee campur bihun, "
-                "mee rebus, mee sup, "
-                "bihun goreng, bihun goreng mamak, bihun goreng telur mata, bihun sup, "
-                "kuey teow goreng, kuey teow goreng mamak, kuey teow goreng basa, "
-                "kuey teow tomyam, "
-                "indomee goreng, indomee double, indomee kosong, "
-                "kambing mysur, ayam goreng, ayam bawang, ayam tandoori, "
-                "ayam rendang, ayam kari, daging rendang, "
-                "milo ais, milo panas, teh tarik, teh ais, kopi ais, kopi panas, "
-                "bandung, bandung ais, bandung panas, sirap ais, sirap panas, "
-                "barli ais, barli panas, air kosong, air mineral, cincau, longan, "
-                "tambah, kurang, pedas, manis, satu, dua, tiga, empat, lima, "
-                "enam, tujuh, lapan, sembilan, sepuluh, itu saja, terima kasih, "
-                "kurang manis, kurang ais, tak nak biji, tak nak sayur, tak nak sambal, "
-                "tak nak pedas, tambah telur, tambah sambal, kaw, kow, pekat, cair, "
-                "garing, lembut, panas, suam, besar, kecil, tabur, dinosaur, kosong, "
-                "tarik, double, extra, lebih, sikit, banyak, tanpa, pedas gila, crispy, "
-                "well done, setengah masak, tak nak bawang, tak nak cili, tak nak kuah, "
-                "kering, tak nak kacang, tak nak timun"
-            )
+            prompt=get_whisper_prompt(),
         )
     print(f"[Whisper] Transcribed: {transcript.text}")
     return transcript.text
