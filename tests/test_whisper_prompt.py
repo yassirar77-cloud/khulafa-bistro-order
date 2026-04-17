@@ -5,13 +5,16 @@ Ensures get_whisper_prompt():
 - returns a non-empty string
 - stays under Whisper's 224-token ceiling
 - keeps the top-3 sellers present
-- keeps the 5 disambiguation anchors (PINNED_ITEMS) present
+- keeps every PINNED_ITEMS entry present
+- emits no duplicate items
+- pins only items that actually exist in MENU
 
 If a future edit drops a pinned item or pushes the prompt over budget,
 these tests fail loudly.
 """
 import pytest
 
+from order_engine import MENU
 from menu_validator import PINNED_ITEMS, get_whisper_prompt
 
 
@@ -44,7 +47,20 @@ def test_contains_top_sellers():
 
 def test_contains_pinned_anchors():
     prompt = get_whisper_prompt().lower()
-    # Sanity: spec pins exactly 5 items. If this changes, retune token budget.
-    assert len(PINNED_ITEMS) == 5
     for item in PINNED_ITEMS:
         assert item in prompt, f"pinned anchor {item!r} missing from prompt"
+
+
+def test_no_duplicate_items():
+    prompt = get_whisper_prompt()
+    # Strip the "Menu Khulafa Bistro Malaysia: " prefix and "Modifiers: ..." suffix
+    # before splitting on commas so we compare item tokens only.
+    _, _, after_prefix = prompt.partition(": ")
+    items_section, _, _ = after_prefix.partition(". Modifiers:")
+    items = [s.strip() for s in items_section.split(",") if s.strip()]
+    assert len(items) == len(set(items)), f"duplicate items in prompt: {items}"
+
+
+def test_all_pinned_items_exist_in_menu():
+    for item in PINNED_ITEMS:
+        assert item in MENU, f"pinned item {item!r} not in MENU — Whisper would hear a phantom"
