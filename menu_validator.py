@@ -254,6 +254,67 @@ def validate_modifier(item_name: str, modifier: str) -> dict:
 # MENU ITEM VALIDATION
 # ================================================================
 
+# ── Whisper alias normalization (Change 3) ──
+# Whisper mishears common Malay F&B terms in predictable ways.
+# Remap those BEFORE exact/greedy/fuzzy matching so the downstream
+# pipeline sees canonical tokens. Safe by construction: if an alias
+# maps incorrectly, the fuzzy matcher still gets to try.
+ALIASES: dict[str, str] = {
+    # Confirmed from production logs (April 2026)
+    "tioys": "teh ais",
+    "signati jambu": "sirap jambu",
+    "signati": "sirap",
+    "minggoreng": "mee goreng",
+    "minggu ring": "mee goreng",
+    "ming goreng": "mee goreng",
+    "lima ais": "limau ais",
+    "kuetiau": "kuey teow",
+    "kuetiau goreng": "kuey teow goreng",
+    # Common Whisper Malay confusions
+    "maggie": "maggi",
+    "maggie goreng": "maggi goreng",
+    "cane": "canai",
+    "canei": "canai",
+    "nasik": "nasi",
+    "mi goreng": "mee goreng",
+    "tehais": "teh ais",
+    "tehtarik": "teh tarik",
+    "tehpanas": "teh panas",
+    "kopio": "kopi o",
+    "kopio ais": "kopi o ais",
+    "miloais": "milo ais",
+    "milopanas": "milo panas",
+    # Pronunciation variants
+    "ayam goring": "ayam goreng",
+    "ayam goren": "ayam goreng",
+    "daging goren": "daging goreng",
+    "daging goring": "daging goreng",
+    "martabak": "murtabak",
+    "martabak ayam": "murtabak ayam",
+    "martabak daging": "murtabak daging",
+}
+
+
+def apply_aliases(text: str) -> str:
+    """Normalize Whisper Malay mishearings before menu matching.
+
+    Full-phrase match wins over per-token replacement. Always returns
+    lowercase, stripped, single-spaced text. Logs to stdout whenever an
+    alias fires so the transformation is auditable in server logs.
+    """
+    text_lower = text.lower().strip()
+    if text_lower in ALIASES:
+        result = ALIASES[text_lower]
+        print(f"[ALIAS] full-phrase: '{text_lower}' -> '{result}'")
+        return result
+    tokens = text_lower.split()
+    normalized = [ALIASES.get(t, t) for t in tokens]
+    result = " ".join(normalized)
+    if result != text_lower:
+        print(f"[ALIAS] token-level: '{text_lower}' -> '{result}'")
+    return result
+
+
 def validate_menu_item(item_name: str) -> dict:
     """
     Validate a single item against the MENU dict.
@@ -275,7 +336,7 @@ def validate_menu_item(item_name: str) -> dict:
             "reason": "not found in menu"
         }
     """
-    item_lower = item_name.lower().strip()
+    item_lower = apply_aliases(item_name)
 
     # 1. Exact match
     if item_lower in MENU:
