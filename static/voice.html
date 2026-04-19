@@ -644,6 +644,25 @@ async function processMessage(text, alternatives) {
     const data = await res.json();
     console.log('[VOICE] Engine response:', data.action, data);
 
+    // Change 7: partial-miss re-ask — bypass normal order processing.
+    // NOTE: early-return here is load-bearing. Reask payloads omit action/text,
+    // so falling through would push a stray "Maaf, boleh ulang?" bubble.
+    if (data.status === 'reask') {
+      isProcessing = false;
+      setMicState('processing');
+      setStatus('Aisha bercakap...');
+      const reaskUrl = (data.audio_urls && data.audio_urls[0]) || null;
+      if (reaskUrl) {
+        isPlaying = true;
+        try { await playSingleAudio(reaskUrl); } catch (e) {}
+        isPlaying = false;
+      }
+      setMicState('idle');
+      setStatus('Bersedia');
+      resumeMic();
+      return;
+    }
+
     const reply = data.text || 'Maaf, boleh ulang?';
     addAiMsg(reply);
 

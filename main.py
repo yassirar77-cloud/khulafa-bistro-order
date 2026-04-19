@@ -27,6 +27,14 @@ from upsell_map import (get_upsell_audio, get_upsell_audio_path, get_upsell_audi
                         UPSELL_AUDIO_MAP, get_combo_cross_sell, get_general_response_audio)
 from menu_validator import validate_order_items, validate_menu_item, log_order_pipeline, get_recent_logs, get_whisper_prompt
 
+# ========== Change 7: Partial-Miss Recovery ==========
+# Feature flag OFF by default. Yassir flips to True in a follow-up PR
+# after personally testing on real device. Do not enable in this PR.
+PARTIAL_MISS_RECOVERY_ENABLED = False
+_partial_miss_attempts: dict[str, int] = {}  # {table_number: attempt_count}
+REASK_AUDIO_PATH = "static/audio/wavs/REASK_001.mp3"
+REASK_AUDIO_URL = "/audio/wavs/REASK_001.mp3"
+
 # ========== Qwen3 API Setup ==========
 _qwen_client = None
 
@@ -1224,6 +1232,48 @@ async def serve_voice_page(table_number: str):
 
     return FileResponse("static/voice.html")
 
+
+# ========== Change 7: Partial-Miss Recovery Helpers ==========
+def count_estimated_items_in_text(text: str) -> int:
+    """Heuristic: estimate how many menu items the customer verbally listed.
+
+    Scores item-marker word frequency against explicit quantity/connective
+    words and returns the more conservative of the two signals (min), with
+    a floor of 1 to avoid dividing by zero downstream.
+    """
+    text_lower = text.lower()
+    item_markers = ["ais", "panas", "goreng", "canai", "telur",
+                    "ayam", "daging", "nasi", "roti", "mee", "teh",
+                    "kopi", "milo", "limau", "jus", "air"]
+    marker_count = sum(text_lower.count(m) for m in item_markers)
+
+    quantity_words = ["satu", "dua", "tiga", "empat", "lima", "enam",
+                      "tujuh", "lapan", "sembilan", "sepuluh",
+                      "dengan", "tambah", "lagi"]
+    quantity_count = sum(1 for q in quantity_words if q in text_lower.split())
+
+    # Markers double-count (e.g. "teh tarik ais" has 2 markers for 1 item),
+    # so halve them and take the tighter of the two signals.
+    return max(1, min(marker_count // 2, quantity_count + 1))
+
+
+def should_trigger_partial_miss(text: str, extracted_count: int) -> tuple[bool, int, int]:
+    """Decide whether DeepSeek likely under-extracted items versus speech.
+
+    Returns (should_trigger, estimated, extracted_count). Short-circuits to
+    (False, 0, extracted_count) when PARTIAL_MISS_RECOVERY_ENABLED is False
+    so no stateful side-effects fire when the feature is disabled.
+    """
+    if not PARTIAL_MISS_RECOVERY_ENABLED:
+        return (False, 0, extracted_count)
+
+    estimated = count_estimated_items_in_text(text)
+    # Conservative: only fires on big mismatches (4+ estimated, 2+ short).
+    if estimated >= 4 and extracted_count < estimated - 1:
+        return (True, estimated, extracted_count)
+    return (False, estimated, extracted_count)
+
+
 @app.post("/api/voice/chat")
 async def voice_chat(request: Request, background_tasks: BackgroundTasks):
     """
@@ -1589,6 +1639,33 @@ Pick the most likely correct menu items from these alternatives."""
             print(f"[Unclear] Suppressed: {alert_reason}")
     except Exception as e:
         print(f"[Unclear] Trigger check failed (non-blocking): {e}")
+
+    # ── Partial-miss recovery (Change 7) ──
+    # Only evaluates on ordering turns. Helper short-circuits when flag is off,
+    # so this block is effectively a no-op until PARTIAL_MISS_RECOVERY_ENABLED
+    # is flipped. Attempts counter is consumed even if the reask audio file is
+    # missing, to prevent a hot loop if the file disappears mid-session.
+    if PARTIAL_MISS_RECOVERY_ENABLED and is_ordering:
+        attempts = _partial_miss_attempts.get(table, 0)
+        extracted_count = len(deepseek_result) if deepseek_result else 0
+        should_reask, est, got = should_trigger_partial_miss(speech, extracted_count)
+
+        if should_reask and attempts < 1:
+            _partial_miss_attempts[table] = attempts + 1
+            print(f"[PartialMiss] T={table} est={est} got={got} → RE_ASK")
+
+            if Path(REASK_AUDIO_PATH).exists():
+                return {
+                    "status": "reask",
+                    "audio_urls": [REASK_AUDIO_URL],
+                    "message": "Maaf, boleh sebut semula dengan perlahan?",
+                }
+            else:
+                print(f"[PartialMiss] WARNING: {REASK_AUDIO_PATH} not found, skipping re-ask")
+        else:
+            if should_reask and attempts >= 1:
+                print(f"[PartialMiss] T={table} STILL_PARTIAL after re-ask → fall through to Change 4")
+            _partial_miss_attempts.pop(table, None)
 
     # ── STEP 2: Look up upsell suggestions for extracted items ──
     upsell_context = ""
