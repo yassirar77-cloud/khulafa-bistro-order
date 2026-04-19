@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +10,10 @@ from datetime import datetime
 import requests
 import httpx
 import os
+import time
+import threading
+import uuid
+from collections import OrderedDict
 from pathlib import Path
 from enhanced_routes import setup_enhanced_routes
 from order_engine import get_engine, MENU, _SORTED_KEYS
@@ -234,9 +238,211 @@ print(f"[Telegram Config] OWNER_CHAT_ID: {OWNER_CHAT_ID if OWNER_CHAT_ID else 'N
 if CASHIER_CHAT_ID and OWNER_CHAT_ID and CASHIER_CHAT_ID == OWNER_CHAT_ID:
     print("[Telegram Config] ⚠️ CASHIER_CHAT_ID and OWNER_CHAT_ID are the SAME — owner will NOT receive duplicate messages")
 
+# ── Unclear-order fallback configuration (Change 4) ──
+UNCLEAR_MIN_WORDS = 2
+UNCLEAR_CONFIDENCE_THRESHOLD = 0.6
+UNCLEAR_DEDUP_WINDOW_SECONDS = 30
+UNCLEAR_RATE_LIMIT_PER_TABLE_PER_MINUTE = 10
+UNCLEAR_RATE_LIMIT_GLOBAL_PER_HOUR = 50
+UNCLEAR_AUDIO_RETENTION_HOURS = 24
+UNCLEAR_TRANSCRIBE_CACHE_TTL_SECONDS = 300
+UNCLEAR_TRANSCRIBE_CACHE_MAX = 50
+
+_unclear_lock = threading.Lock()
+_unclear_dedup_cache: dict = {}
+_unclear_rate_table: dict = {}
+_unclear_rate_global: list = []
+_unclear_alerts_pending: dict = {}
+_transcribe_audio_cache: "OrderedDict" = OrderedDict()
+
+
+def _normalize_text(text: str) -> str:
+    if not text:
+        return ""
+    return " ".join(text.lower().split())
+
+
+def _cache_transcribe_audio(table: str, text: str, audio_bytes: bytes) -> None:
+    """Store raw audio bytes keyed by (table, normalized text) so the unclear
+    fallback can persist them later if triggered. Bounded + TTL-evicted."""
+    key = (table, _normalize_text(text))
+    now = time.time()
+    with _unclear_lock:
+        expired = [k for k, (_, ts) in _transcribe_audio_cache.items()
+                   if now - ts > UNCLEAR_TRANSCRIBE_CACHE_TTL_SECONDS]
+        for k in expired:
+            _transcribe_audio_cache.pop(k, None)
+        _transcribe_audio_cache[key] = (audio_bytes, now)
+        _transcribe_audio_cache.move_to_end(key)
+        while len(_transcribe_audio_cache) > UNCLEAR_TRANSCRIBE_CACHE_MAX:
+            _transcribe_audio_cache.popitem(last=False)
+
+
+def _pop_transcribe_audio(table: str, text: str):
+    """Pop cached audio bytes for (table, text). None if missing or expired."""
+    key = (table, _normalize_text(text))
+    now = time.time()
+    with _unclear_lock:
+        entry = _transcribe_audio_cache.pop(key, None)
+        if not entry:
+            return None
+        audio_bytes, ts = entry
+        if now - ts > UNCLEAR_TRANSCRIBE_CACHE_TTL_SECONDS:
+            return None
+        return audio_bytes
+
+
+def should_trigger_unclear_fallback(table: str, text: str, deepseek_result):
+    """Evaluate the 5 trigger conditions for the unclear-order fallback.
+
+    Returns (should_fire, reason). SIDE EFFECT: when returning True, updates
+    the dedup and rate-limit caches so repeat calls in the window are
+    suppressed. Call at most once per voice/chat request.
+
+    Reasons: empty_text | single_word | clear_match | dedup |
+    rate_limit_table | rate_limit_global | unclear
+    """
+    if not text or not text.strip():
+        return False, "empty_text"
+    if len(text.split()) < UNCLEAR_MIN_WORDS:
+        return False, "single_word"
+
+    is_unclear = False
+    if deepseek_result:
+        for item in deepseek_result:
+            if not isinstance(item, dict):
+                continue
+            if item.get("needs_clarification") is True:
+                is_unclear = True
+                break
+            matched = (item.get("matched_item") or "").strip()
+            try:
+                confidence = float(item.get("confidence", 1.0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+            if matched == "" or confidence < UNCLEAR_CONFIDENCE_THRESHOLD:
+                is_unclear = True
+                break
+    if not is_unclear:
+        return False, "clear_match"
+
+    normalized = _normalize_text(text)
+    now = time.time()
+    with _unclear_lock:
+        last_sent = _unclear_dedup_cache.get((table, normalized))
+        if last_sent is not None and now - last_sent < UNCLEAR_DEDUP_WINDOW_SECONDS:
+            return False, "dedup"
+
+        table_times = [t for t in _unclear_rate_table.get(table, []) if now - t < 60]
+        if len(table_times) >= UNCLEAR_RATE_LIMIT_PER_TABLE_PER_MINUTE:
+            _unclear_rate_table[table] = table_times
+            return False, "rate_limit_table"
+
+        global_times = [t for t in _unclear_rate_global if now - t < 3600]
+        if len(global_times) >= UNCLEAR_RATE_LIMIT_GLOBAL_PER_HOUR:
+            _unclear_rate_global[:] = global_times
+            return False, "rate_limit_global"
+
+        _unclear_dedup_cache[(table, normalized)] = now
+        stale = [k for k, ts in _unclear_dedup_cache.items()
+                 if now - ts > UNCLEAR_DEDUP_WINDOW_SECONDS * 10]
+        for k in stale:
+            _unclear_dedup_cache.pop(k, None)
+        table_times.append(now)
+        _unclear_rate_table[table] = table_times
+        global_times.append(now)
+        _unclear_rate_global[:] = global_times
+
+    return True, "unclear"
+
+
+def _purge_old_customer_audio(directory: Path, max_age_hours: int) -> None:
+    if not directory.exists():
+        return
+    cutoff = time.time() - max_age_hours * 3600
+    for p in directory.iterdir():
+        try:
+            if p.is_file() and p.stat().st_mtime < cutoff:
+                p.unlink()
+        except OSError:
+            pass
+
+
+def save_customer_audio(audio_bytes: bytes, table: str) -> str:
+    """Persist customer audio and return its /audio URL. Runs best-effort
+    retention purge on each call."""
+    directory = Path("static/audio/customer")
+    directory.mkdir(parents=True, exist_ok=True)
+    _purge_old_customer_audio(directory, UNCLEAR_AUDIO_RETENTION_HOURS)
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    safe_table = "".join(ch for ch in (table or "") if ch.isalnum() or ch in ("-", "_")) or "unknown"
+    filename = f"{safe_table}_{timestamp}.webm"
+    path = directory / filename
+    with open(path, "wb") as f:
+        f.write(audio_bytes)
+    return f"/audio/customer/{filename}"
+
+
+def send_unclear_alert(table: str, text: str, audio_url=None):
+    """Send the unclear-order Telegram alert with Handled/Left buttons.
+    Never raises — returns alert_id or None."""
+    try:
+        alert_id = uuid.uuid4().hex[:8]
+        with _unclear_lock:
+            _unclear_alerts_pending[alert_id] = {
+                "table": table,
+                "text": text,
+                "created_at": time.time(),
+            }
+
+        time_str = datetime.now().strftime("%I:%M %p").lstrip("0")
+        lines = [
+            f"⚠️ TABLE {table} NEEDS WAITER",
+            f"🕐 {time_str}",
+            f"🎤 Customer said: \"{text}\"",
+        ]
+        if audio_url:
+            lines.append(f"🔊 Audio: {audio_url}")
+        message = "\n".join(lines)
+
+        inline_keyboard = {
+            "inline_keyboard": [[
+                {"text": "✅ Handled",
+                 "callback_data": f"unclear_handled_{alert_id}"},
+                {"text": "❌ Customer Left",
+                 "callback_data": f"unclear_left_{alert_id}"},
+            ]],
+        }
+
+        if CASHIER_CHAT_ID:
+            send_message(CASHIER_CHAT_ID, message, reply_markup=inline_keyboard)
+        if OWNER_CHAT_ID and OWNER_CHAT_ID != CASHIER_CHAT_ID:
+            send_message(OWNER_CHAT_ID, message, reply_markup=inline_keyboard)
+
+        return alert_id
+    except Exception as e:
+        print(f"[Unclear] send_unclear_alert failed: {e}")
+        return None
+
+
+def log_unclear_event(kind: str, payload: dict) -> None:
+    """Append a JSON line to logs/unclear_{resolved,lost}.jsonl."""
+    try:
+        Path("logs").mkdir(exist_ok=True)
+        filename = "unclear_resolved.jsonl" if kind == "resolved" else "unclear_lost.jsonl"
+        entry = dict(payload)
+        entry["kind"] = kind
+        entry["timestamp"] = datetime.now().isoformat()
+        with open(Path("logs") / filename, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[Unclear] log_unclear_event failed: {e}")
+
+
 app = FastAPI(title="Khulafa Bistro API")
 
 # Mount audio files for Aisha voice system
+Path("static/audio/customer").mkdir(parents=True, exist_ok=True)
 if os.path.exists("static/audio"):
     app.mount("/audio", StaticFiles(directory="static/audio"), name="audio")
 
@@ -820,8 +1026,12 @@ async def handle_telegram_buttons(update: Update, context: ContextTypes.DEFAULT_
     
     callback_data = query.data
     print(f"🔘 Button clicked: {callback_data}")
-    
+
     try:
+        if callback_data.startswith("unclear_handled_") or callback_data.startswith("unclear_left_"):
+            await _handle_unclear_callback(query, callback_data)
+            return
+
         action, order_id = callback_data.split('_')
         order_id = int(order_id)
         
@@ -897,6 +1107,69 @@ Khulafa Bistro 🌟"""
         print(f"❌ Error handling button: {e}")
         await query.edit_message_text(text=f"{query.message.text}\n\n⚠️ Error: {str(e)}")
 
+
+async def _handle_unclear_callback(query, callback_data: str):
+    """Handle ✅ Handled / ❌ Customer Left clicks on unclear-order alerts."""
+    try:
+        if callback_data.startswith("unclear_handled_"):
+            kind = "resolved"
+            alert_id = callback_data[len("unclear_handled_"):]
+        elif callback_data.startswith("unclear_left_"):
+            kind = "lost"
+            alert_id = callback_data[len("unclear_left_"):]
+        else:
+            return
+
+        with _unclear_lock:
+            pending = _unclear_alerts_pending.pop(alert_id, None)
+
+        user = getattr(query, "from_user", None)
+        username = (user.username if user and getattr(user, "username", None)
+                    else (user.first_name if user and getattr(user, "first_name", None)
+                          else "unknown"))
+
+        time_str = datetime.now().strftime("%I:%M %p").lstrip("0")
+        base_text = ""
+        if getattr(query, "message", None) and getattr(query.message, "text", None):
+            base_text = query.message.text
+
+        if pending is None:
+            new_text = f"{base_text}\n\n⚠️ Alert expired or unknown."
+            try:
+                await query.edit_message_text(text=new_text)
+            except Exception as e:
+                print(f"[Unclear] edit_message_text failed: {e}")
+            return
+
+        if kind == "resolved":
+            duration = int(time.time() - pending["created_at"])
+            new_text = (f"{base_text}\n\n"
+                        f"✅ RESOLVED by @{username} at {time_str} ({duration}s)")
+            log_unclear_event("resolved", {
+                "alert_id": alert_id,
+                "table": pending["table"],
+                "text": pending["text"],
+                "resolver": username,
+                "duration_seconds": duration,
+            })
+        else:
+            new_text = (f"{base_text}\n\n"
+                        f"❌ CUSTOMER LEFT — reported by @{username}")
+            log_unclear_event("lost", {
+                "alert_id": alert_id,
+                "table": pending["table"],
+                "text": pending["text"],
+                "reporter": username,
+            })
+
+        try:
+            await query.edit_message_text(text=new_text)
+        except Exception as e:
+            print(f"[Unclear] edit_message_text failed: {e}")
+    except Exception as e:
+        print(f"[Unclear] _handle_unclear_callback error: {e}")
+
+
 # Run Telegram Bot in Background
 def run_telegram_bot():
     """Run Telegram bot to handle button clicks"""
@@ -952,7 +1225,7 @@ async def serve_voice_page(table_number: str):
     return FileResponse("static/voice.html")
 
 @app.post("/api/voice/chat")
-async def voice_chat(request: Request):
+async def voice_chat(request: Request, background_tasks: BackgroundTasks):
     """
     Dual AI Pipeline:
     STEP 1 - DeepSeek: Intent extraction & fuzzy menu matching from raw speech
@@ -1300,6 +1573,22 @@ Pick the most likely correct menu items from these alternatives."""
             except Exception as e:
                 print(f"[DeepSeek] Error: {e} - falling back to Qwen-only")
                 deepseek_result = None
+
+    # ── Unclear-order fallback (Change 4) ──
+    # Alerts cashier+waiter via Telegram when DeepSeek signals low confidence.
+    # Fires in background so customer-facing latency is unaffected.
+    try:
+        should_alert, alert_reason = should_trigger_unclear_fallback(
+            table, speech, deepseek_result)
+        if should_alert:
+            audio_bytes = _pop_transcribe_audio(table, speech)
+            audio_url = save_customer_audio(audio_bytes, table) if audio_bytes else None
+            background_tasks.add_task(send_unclear_alert, table, speech, audio_url)
+            print(f"[Unclear] Fallback queued (table={table}, audio={'yes' if audio_url else 'no'})")
+        elif alert_reason not in ("clear_match", "empty_text", "single_word"):
+            print(f"[Unclear] Suppressed: {alert_reason}")
+    except Exception as e:
+        print(f"[Unclear] Trigger check failed (non-blocking): {e}")
 
     # ── STEP 2: Look up upsell suggestions for extracted items ──
     upsell_context = ""
@@ -1795,6 +2084,7 @@ async def voice_transcribe(request: Request):
             tmp_path = tmp.name
 
         transcribed_text = transcribe_audio(tmp_path).strip()
+        _cache_transcribe_audio(table_number, transcribed_text, audio_content)
         os.unlink(tmp_path)
 
         print(f"[Whisper] Transcribed: '{transcribed_text}'")
