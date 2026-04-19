@@ -215,6 +215,36 @@ html,body { height:100%; background:var(--dark); font-family:'Segoe UI',system-u
 const TABLE = new URLSearchParams(location.search).get('table')
     || location.pathname.split('/').filter(Boolean).pop() || 'T01';
 
+// ===== BARGE-IN CONFIG =====
+// Set to true ONLY after personal testing on real phone at Bistro.
+// To test on one device without redeploy:
+//   In browser console: window.enableBargeIn()
+let BARGE_IN_ENABLED = false;
+
+window.enableBargeIn = () => {
+  localStorage.setItem('bargeInOverride', 'true');
+  location.reload();
+};
+window.disableBargeIn = () => {
+  localStorage.removeItem('bargeInOverride');
+  location.reload();
+};
+if (localStorage.getItem('bargeInOverride') === 'true') {
+  BARGE_IN_ENABLED = true;
+  console.log('[BargeIn] Override enabled via localStorage');
+}
+
+const BARGE_IN_VOLUME_THRESHOLD =
+    parseInt(localStorage.getItem('bargeInThreshold')) || 25;
+
+window.setBargeInThreshold = (n) => {
+  localStorage.setItem('bargeInThreshold', n);
+  location.reload();
+};
+
+const BARGE_IN_DEBOUNCE_MS = 300;
+const BARGE_IN_CHECK_INTERVAL_MS = 100;
+
 // ===== STATE =====
 let recognition = null;
 let shouldListen = false;
@@ -228,6 +258,17 @@ const MIC_MAX_RETRIES = 3;
 let inCancelMode = false; // true when waiting for cancel selection
 let upsellPending = null;  // {item, upsell_item, upsell_price} when waiting for upsell response
 
+// ===== BARGE-IN STATE =====
+let bargeInAudioCtx = null;
+let bargeInAnalyser = null;
+let bargeInStream = null;
+let bargeInDataArray = null;
+let bargeInLoudStartTs = 0;
+let bargeInIntervalId = null;
+let bargeInDebugPanel = null;
+let bargeInLastVolume = 0;
+window._bargeInAborted = false;
+
 document.getElementById('splashTable').textContent = 'Table ' + TABLE;
 document.getElementById('tableBadge').textContent = 'Table ' + TABLE;
 document.getElementById('successTable').textContent = 'Meja: ' + TABLE;
@@ -235,6 +276,8 @@ document.getElementById('successTable').textContent = 'Meja: ' + TABLE;
 // ===== START SESSION =====
 function startSession() {
   document.getElementById('splash').classList.add('hide');
+  // Piggy-back on this user-gesture tap to unlock AudioContext for iOS Safari.
+  initBargeIn();
   setTimeout(() => { document.getElementById('splash').style.display='none'; initChat(); }, 600);
 }
 
@@ -364,6 +407,147 @@ function initSpeechRecognition() {
       }
     }
   };
+}
+
+// ===== BARGE-IN: VAD INIT =====
+async function initBargeIn() {
+  if (!BARGE_IN_ENABLED) return;
+
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    console.warn('[BargeIn] Unsupported browser — barge-in disabled');
+    return;
+  }
+
+  // Create AudioContext synchronously inside the click gesture for iOS Safari.
+  try {
+    bargeInAudioCtx = new AC();
+  } catch (e) {
+    console.warn('[BargeIn] AudioContext create failed:', e);
+    return;
+  }
+  if (bargeInAudioCtx.state === 'suspended') {
+    try { await bargeInAudioCtx.resume(); } catch (e) {}
+  }
+
+  try {
+    bargeInStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  } catch (e) {
+    console.warn('[BargeIn] Mic permission denied — barge-in disabled, normal flow intact');
+    try { bargeInAudioCtx.close(); } catch (_) {}
+    bargeInAudioCtx = null;
+    return;
+  }
+
+  try {
+    const source = bargeInAudioCtx.createMediaStreamSource(bargeInStream);
+    bargeInAnalyser = bargeInAudioCtx.createAnalyser();
+    bargeInAnalyser.fftSize = 256;
+    bargeInAnalyser.smoothingTimeConstant = 0.5;
+    // IMPORTANT: do NOT connect analyser to destination (prevents feedback loop).
+    source.connect(bargeInAnalyser);
+    bargeInDataArray = new Uint8Array(bargeInAnalyser.frequencyBinCount);
+  } catch (e) {
+    console.warn('[BargeIn] Audio graph setup failed:', e);
+    return;
+  }
+
+  if (localStorage.getItem('bargeInOverride') === 'true') {
+    createBargeInDebugPanel();
+  }
+
+  bargeInIntervalId = setInterval(bargeInMonitor, BARGE_IN_CHECK_INTERVAL_MS);
+  console.log('[BargeIn] VAD ready. threshold=' + BARGE_IN_VOLUME_THRESHOLD
+    + ' debounce=' + BARGE_IN_DEBOUNCE_MS + 'ms');
+}
+
+function bargeInMonitor() {
+  if (!bargeInAnalyser) return;
+
+  if (!isPlaying) {
+    bargeInLoudStartTs = 0;
+    if (bargeInDebugPanel) updateBargeInDebugPanel(0, false);
+    return;
+  }
+
+  bargeInAnalyser.getByteFrequencyData(bargeInDataArray);
+  let sum = 0;
+  for (let i = 0; i < bargeInDataArray.length; i++) sum += bargeInDataArray[i];
+  const avg = sum / bargeInDataArray.length;
+  const volume = (avg / 255) * 100;
+  bargeInLastVolume = volume;
+
+  if (volume < BARGE_IN_VOLUME_THRESHOLD) {
+    bargeInLoudStartTs = 0;
+  } else if (bargeInLoudStartTs === 0) {
+    bargeInLoudStartTs = performance.now();
+  } else if (performance.now() - bargeInLoudStartTs >= BARGE_IN_DEBOUNCE_MS) {
+    triggerBargeIn(volume);
+  }
+
+  if (bargeInDebugPanel) updateBargeInDebugPanel(volume, true);
+}
+
+function triggerBargeIn(volume) {
+  if (!isPlaying) return;
+  console.log('[BargeIn] Customer interrupted at volume=' + volume.toFixed(1));
+
+  window._bargeInAborted = true;
+
+  if (currentAudio) {
+    try { currentAudio.pause(); } catch (e) {}
+    try { currentAudio.currentTime = 0; } catch (e) {}
+    currentAudio = null;
+  }
+  if (window.speechSynthesis) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+
+  isPlaying = false;
+  try { document.getElementById('waveform').classList.remove('active'); } catch (e) {}
+  setStatus('Bersedia');
+  bargeInLoudStartTs = 0;
+
+  resumeMic();
+}
+
+// ===== BARGE-IN: DEBUG PANEL (only when override active) =====
+function createBargeInDebugPanel() {
+  if (bargeInDebugPanel) return;
+  const p = document.createElement('div');
+  p.id = 'bargeInDebugPanel';
+  p.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;'
+    + 'background:rgba(0,0,0,0.75);color:#0f0;font-family:monospace;'
+    + 'font-size:10px;padding:6px 8px;border-radius:6px;pointer-events:none;'
+    + 'border:1px solid rgba(0,255,0,0.3);line-height:1.4;min-width:140px;';
+  p.innerHTML =
+    '<div style="color:#D4A843;font-weight:bold;">BARGE-IN DEBUG</div>'
+    + '<div>vol: <span id="bargeDbgVol">0</span></div>'
+    + '<div>threshold: ' + BARGE_IN_VOLUME_THRESHOLD + '</div>'
+    + '<div>playing: <span id="bargeDbgPlaying">false</span></div>'
+    + '<div>debounce: <span id="bargeDbgDebounce">0</span>ms</div>'
+    + '<div>state: <span id="bargeDbgState">idle</span></div>';
+  document.body.appendChild(p);
+  bargeInDebugPanel = p;
+}
+
+function updateBargeInDebugPanel(volume, playing) {
+  const v = document.getElementById('bargeDbgVol');
+  const pl = document.getElementById('bargeDbgPlaying');
+  const db = document.getElementById('bargeDbgDebounce');
+  const st = document.getElementById('bargeDbgState');
+  if (v) v.textContent = volume.toFixed(1);
+  if (pl) { pl.textContent = playing ? 'true' : 'false'; pl.style.color = playing ? '#4CAF50' : '#888'; }
+  const dbMs = bargeInLoudStartTs === 0 ? 0 : (performance.now() - bargeInLoudStartTs);
+  if (db) db.textContent = dbMs.toFixed(0);
+  let state = 'idle';
+  if (!playing) state = 'idle';
+  else if (volume >= BARGE_IN_VOLUME_THRESHOLD && dbMs > 0) state = 'arming (' + dbMs.toFixed(0) + 'ms)';
+  else if (volume >= BARGE_IN_VOLUME_THRESHOLD) state = 'detecting';
+  else state = 'listening';
+  if (st) { st.textContent = state; st.style.color = state.startsWith('arming') ? '#E53935' : '#0f0'; }
 }
 
 function toggleMic() {
@@ -873,27 +1057,34 @@ function showDisambiguationButtons(disambiguateData) {
 // ===== AUDIO PLAYBACK =====
 async function playAudioSequence(matches, ttsNames) {
   isPlaying = true;
+  window._bargeInAborted = false;
   setStatus('Aisha bercakap...');
   document.getElementById('waveform').classList.add('active');
 
   // Play TTS for items without pre-recorded audio
   if (ttsNames && ttsNames.length > 0) {
     for (const name of ttsNames) {
+      if (window._bargeInAborted) { console.log('[BargeIn] Aborting TTS sequence'); break; }
       try { await speakTTS(name); } catch(e) { console.warn('[TTS] Error:', e); }
     }
   }
 
   // Play pre-recorded audio files
-  for (const m of matches) {
+  for (let i = 0; i < matches.length; i++) {
+    if (window._bargeInAborted) { console.log('[BargeIn] Aborting audio sequence at index ' + i); break; }
+    const m = matches[i];
     const audioPath = m.audio_path || m.file || m.audio_file || m;
     if (audioPath && m.audio_exists !== false) {
       try { await playSingleAudio(audioPath); } catch(e) {}
     }
   }
 
-  document.getElementById('waveform').classList.remove('active');
-  isPlaying = false;
-  setStatus('Bersedia');
+  // If barge-in already handled teardown, don't override its state.
+  if (!window._bargeInAborted) {
+    document.getElementById('waveform').classList.remove('active');
+    isPlaying = false;
+    setStatus('Bersedia');
+  }
 }
 
 function playSingleAudio(url) {
