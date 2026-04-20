@@ -16,3 +16,6 @@ coverage_report/
 
 # Runtime-generated order log (appended on every voice_chat request)
 logs/order_log.jsonl
+
+# Generated QR code printouts (produced by generate_qrs.py; too large for repo)
+*.pdf
