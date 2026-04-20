@@ -17,12 +17,10 @@ def migrate():
     )
     ''')
 
-    # Insert test tables T01, T02, T03
-    test_tables = [
-        ('T01', '/table/T01'),
-        ('T02', '/table/T02'),
-        ('T03', '/table/T03'),
-    ]
+    # Insert tables T01..T20 (idempotent — INSERT OR IGNORE keeps existing rows).
+    # Extend the range here when more tables are added; production DBs will also
+    # pick up the new rows on the next startup.
+    test_tables = [(f'T{n:02d}', f'/table/T{n:02d}') for n in range(1, 21)]
     for table_number, qr_url in test_tables:
         cursor.execute(
             'INSERT OR IGNORE INTO restaurant_tables (table_number, qr_url) VALUES (?, ?)',

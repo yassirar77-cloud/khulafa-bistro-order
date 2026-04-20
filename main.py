@@ -485,6 +485,12 @@ async def startup_event():
     except Exception as e:
         print(f"Voice tables migration error (may already be done): {e}")
 
+    try:
+        from migrate_add_tables_t04_t20 import migrate as migrate_t04_t20
+        migrate_t04_t20()
+    except Exception as e:
+        print(f"[Migration] T04-T20 skipped: {e}")
+
     # Start Telegram bot in background thread for button handling
     try:
         print("🚀 Starting Telegram bot in background...")
