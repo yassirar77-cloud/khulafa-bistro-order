@@ -13,3 +13,6 @@ __pycache__/
 .coverage
 coverage_report/
 .pytest_cache/
+
+# Runtime-generated order log (appended on every voice_chat request)
+logs/order_log.jsonl
