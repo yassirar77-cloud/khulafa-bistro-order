@@ -304,6 +304,59 @@ MENU = {
 # Convert tuple format to dict format for consistent access
 MENU = {k: {"audio_id": v[0], "price": v[1], "popularity": v[2], "category": v[3]} for k, v in MENU.items()}
 
+
+# ================================================================
+# ICONIC_DRINKS_FLOOR — workaround for missing POS SKUs
+# ================================================================
+# The 06-Apr-2026 POS export (source for the popularity field above)
+# is missing entire SKUs for several universally-ordered drinks:
+# teh tarik, milo panas, kopi panas, bandung, air kosong, cincau, longan.
+# These items land with popularity=0 even though they are daily-ordered
+# at any Malaysian mamak. That zero silently demotes them in:
+#   - fuzzy-match tie-break (menu_validator.py)
+#   - top-30 best-sellers injected into the DeepSeek prompt (main.py)
+# Root cause: Yassir's POS aggregates default preparations under a single
+# base SKU (e.g. "Teh" = teh tarik by default), so the variant never
+# appears as its own row.
+#
+# The floor below is a CONSERVATIVE INDUSTRY ESTIMATE, not real sales
+# data. It exists only to keep these items non-zero so downstream
+# consumers don't erase them. REMOVE this block (or set every value to 0)
+# once a fresh POS export that itemizes hot-vs-iced and tarik-vs-plain
+# variants as separate SKUs is merged in. See docs/POS_DATA_TODO.md.
+#
+# Tuning rule: only raise values, never lower. Real POS data always wins.
+ICONIC_DRINKS_FLOOR = {
+    "teh tarik":     50,   # THE signature mamak drink, often default "teh"
+    "kopi panas":    15,   # Breakfast staple
+    "kopi o panas":  10,
+    "milo panas":    12,   # Breakfast staple
+    "sirap panas":    5,
+    "bandung":       15,
+    "bandung ais":   10,
+    "bandung panas":  3,
+    "air kosong":    20,   # Free refill requests
+    "cincau":         8,
+    "longan":         8,
+}
+
+
+def apply_popularity_floor(menu_dict: dict) -> dict:
+    """Apply popularity floor for iconic items missing from POS export.
+
+    Only raises values, never lowers — safe idempotent op.
+    """
+    for item, floor in ICONIC_DRINKS_FLOOR.items():
+        if item in menu_dict:
+            current = menu_dict[item].get("popularity", 0)
+            if current < floor:
+                menu_dict[item]["popularity"] = floor
+                print(f"[PopFloor] '{item}' {current} -> {floor}")
+    return menu_dict
+
+
+apply_popularity_floor(MENU)
+
 # Common audio responses used across the app
 AUDIO_RESPONSES = {
     "ada_lagi": "0043",
