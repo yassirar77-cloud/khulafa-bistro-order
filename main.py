@@ -1599,8 +1599,10 @@ Pick the most likely correct menu items from these alternatives."""
                 ds_response = deepseek_client.chat.completions.create(
                     model="deepseek-chat",
                     max_tokens=300,
+                    temperature=0.1,
+                    response_format={"type": "json_object"},
                     messages=[
-                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. The customer orders via voice and speech recognition may mishear Malay food words. You receive multiple speech alternatives — use ALL of them to determine the correct menu items. Return ONLY valid JSON arrays, nothing else."},
+                        {"role": "system", "content": "You extract structured food orders from messy speech transcripts. The customer orders via voice and speech recognition may mishear Malay food words. You receive multiple speech alternatives — use ALL of them to determine the correct menu items. Return ONLY valid JSON arrays, nothing else.\n\nCRITICAL RULES (MUST FOLLOW):\n1. ONLY extract items the customer EXPLICITLY said. Do NOT guess, substitute, or assume.\n2. If customer said \"daging\", return \"daging\" — do NOT change to \"ayam\" or any other protein.\n3. If you are unsure about an item, mark it with \"uncertain\": true instead of guessing.\n4. If customer speech is unclear or no food items mentioned, return {\"items\": []} — empty is better than wrong.\n5. Return ONLY valid JSON — no markdown code fences, no explanations outside JSON."},
                         {"role": "user", "content": deepseek_prompt}
                     ]
                 )
@@ -1614,6 +1616,10 @@ Pick the most likely correct menu items from these alternatives."""
                     arr_match = re.search(r'\[.*\]', ds_raw, re.DOTALL)
                     if arr_match:
                         deepseek_result = json_lib.loads(arr_match.group())
+
+                # Unwrap {"items": [...]} envelope from json_object response_format
+                if isinstance(deepseek_result, dict) and "items" in deepseek_result:
+                    deepseek_result = deepseek_result["items"]
 
                 # Normalize to list
                 if isinstance(deepseek_result, dict):
