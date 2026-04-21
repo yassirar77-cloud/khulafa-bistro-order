@@ -256,7 +256,7 @@ _FOOD_CATEGORIES = {
                 "briyani sayur", "briyani lamb shank"],
     "maggi goreng": ["maggi goreng", "maggi goreng mamak", "maggi goreng ayam",
                      "maggi goreng daging", "maggi goreng kambing", "maggi goreng telur mata",
-                     "maggi goreng basa"],
+                     "maggi goreng basah"],
     "naan": ["naan", "naan biasa", "naan cheese", "naan garlic", "naan butter",
              "naan cheese garlic", "naan mozzerella", "naan mumtaj", "naan tajmahal"],
     "western food": ["chicken chop", "lamb chop", "fish and chips", "chicken maryland",

@@ -153,7 +153,7 @@ _RAW_UPSELL_MAP = {
         ("maggi goreng kambing", "Maggi Goreng Kambing lagi power! Nak try?"),
         ("maggi goreng daging", "Maggi Goreng Daging pun sedap! Nak try?"),
     ],
-    "maggi goreng basa": [
+    "maggi goreng basah": [
         ("maggi goreng daging", "Maggi Goreng Daging lagi sedap! Nak try?"),
         ("maggi goreng ayam", "Maggi Goreng Ayam pun best! Nak try?"),
     ],
@@ -197,7 +197,7 @@ _RAW_UPSELL_MAP = {
         ("bihun goreng telur mata", "Bihun Goreng Telur Mata lagi best! Nak try?"),
     ],
     "kuey teow goreng": [
-        ("kuey teow goreng basa", "Kuey Teow Goreng Basa lagi sedap! Nak try?"),
+        ("kuey teow goreng basah", "Kuey Teow Goreng Basah lagi sedap! Nak try?"),
         ("kuey teow tomyam", "Kuey Teow Tomyam pun power! Nak try?"),
     ],
     "kuey teow goreng mamak": [
