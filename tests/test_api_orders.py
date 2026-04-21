@@ -208,6 +208,49 @@ class TestCancelOrder:
         response = client.post("/api/orders/999999/cancel")
         assert response.status_code == 404
 
+    def test_cancel_voice_qr_order_skips_customer_notification(self, client):
+        """Bug 2 (Apr 2026): voice/QR walk-in orders carry the sentinel
+        customer_telegram_id='voice_qr'. Cancelling one must not crash on
+        the [400] 'chat not found' path, and must NOT send a customer
+        message (the sentinel is not a Telegram chat)."""
+        time.sleep(1)
+        payload = {
+            "customer_telegram_id": "voice_qr",   # anonymous walk-in
+            "customer_name": "Table T01",
+            "customer_phone": "",
+            "order_type": "dine_in",
+            "items": [{"menu_item_id": 1, "quantity": 1}],
+        }
+        with patch("main.requests") as mock_req:
+            mock_req.post.return_value = MagicMock(text='{"ok": true}')
+            resp = client.post("/api/orders", json=payload)
+        assert resp.status_code == 200
+        order_id = resp.json()["order_id"]
+
+        with patch("main.send_message") as mock_send:
+            response = client.post(f"/api/orders/{order_id}/cancel")
+
+        # Endpoint succeeds — no crash
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        # Anonymous customer is skipped — send_message must NOT be called
+        mock_send.assert_not_called()
+
+    def test_cancel_normal_order_still_notifies_customer(self, client):
+        """Guard against over-broad skip: real telegram customers
+        still receive their cancel notification."""
+        time.sleep(1)
+        resp = _create_order(client)
+        assert resp.status_code == 200
+        order_id = resp.json()["order_id"]
+
+        with patch("main.send_message") as mock_send:
+            response = client.post(f"/api/orders/{order_id}/cancel")
+
+        assert response.status_code == 200
+        # Real customer id → send_message IS called
+        mock_send.assert_called_once()
+
 
 # ============================================================
 # POST /api/orders/{order_id}/confirm_payment

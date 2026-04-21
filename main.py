@@ -239,6 +239,18 @@ if not OWNER_CHAT_ID:
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else ""
 
+# Sentinel values stored in orders.customer_telegram_id for walk-in customers
+# who placed their order via voice/QR at the table and therefore have no
+# Telegram account. Sending to these values returns [400] "chat not found".
+ANONYMOUS_CUSTOMER_CHAT_IDS = {"voice_qr"}
+
+
+def is_anonymous_customer(customer_chat_id) -> bool:
+    """True when the chat_id is a walk-in sentinel (no Telegram account)."""
+    if not customer_chat_id:
+        return True
+    return str(customer_chat_id) in ANONYMOUS_CUSTOMER_CHAT_IDS
+
 # Startup diagnostic: show configured Telegram recipients
 print(f"[Telegram Config] BOT_TOKEN: {'SET ✅' if BOT_TOKEN else 'NOT SET ❌'}")
 print(f"[Telegram Config] CASHIER_CHAT_ID: {CASHIER_CHAT_ID if CASHIER_CHAT_ID else 'NOT SET ❌'}")
@@ -767,12 +779,18 @@ If you believe this is an error or have already paid, please contact us directly
 Thank you for your understanding.
 Khulafa Bistro 🌟"""
     
-    try:
-        send_message(order['customer_telegram_id'], cancel_message)
-        print(f"✅ Cancellation notice sent to customer")
-    except Exception as e:
-        print(f"Error sending cancellation notice: {e}")
-    
+    customer_chat_id = order['customer_telegram_id']
+    if is_anonymous_customer(customer_chat_id):
+        print(f"[Telegram] Skipping CUSTOMER cancel notification — "
+              f"anonymous walk-in order (chat_id={customer_chat_id}, "
+              f"order #{order['order_number']})")
+    else:
+        try:
+            send_message(customer_chat_id, cancel_message)
+            print(f"✅ Cancellation notice sent to customer")
+        except Exception as e:
+            print(f"Error sending cancellation notice: {e}")
+
     return {"success": True, "message": "Order cancelled successfully"}
 
 # NEW FEATURE: Remind Payment
@@ -1074,9 +1092,17 @@ Reason: Payment not verified
 
 Please contact us if you have questions.
 Khulafa Bistro 🌟"""
-                
-                send_message(order['customer_telegram_id'], cancel_msg)
-                await query.edit_message_text(text=f"{query.message.text}\n\n❌ ORDER CANCELLED ❌\nCustomer notified.")
+
+                customer_chat_id = order['customer_telegram_id']
+                if is_anonymous_customer(customer_chat_id):
+                    print(f"[Telegram] Skipping CUSTOMER cancel notification — "
+                          f"anonymous walk-in order (chat_id={customer_chat_id}, "
+                          f"order #{order['order_number']})")
+                    cashier_suffix = "Walk-in order (no customer notification)."
+                else:
+                    send_message(customer_chat_id, cancel_msg)
+                    cashier_suffix = "Customer notified."
+                await query.edit_message_text(text=f"{query.message.text}\n\n❌ ORDER CANCELLED ❌\n{cashier_suffix}")
                 print(f"✅ Order {order_id} cancelled")
         
         elif action == "remind":
@@ -1931,9 +1957,8 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
             invalid_text = ", ".join(invalid_names)
             reply = reply + f" ('{invalid_text}' — maaf, boleh ulang item tu?)"
 
-    # Log modifier warnings
-    for mw in validation_result.get("modifier_warnings", []):
-        print(f"[Validator] Modifier warning: '{mw['modifier']}' not valid for {mw['item']} ({mw['reason']})")
+    # Modifier strips are already logged at the validator layer
+    # (`[Validator] Stripped invalid modifier ...`). Nothing else to emit here.
 
     # Normalize action names for frontend consistency
     if action == "add" and new_items:
@@ -2112,6 +2137,8 @@ IMPORTANT: Always respond with valid JSON only - no extra text."""
         result["validation_warnings"] = validation_result["invalid_items"]
     if validation_result.get("modifier_warnings"):
         result["modifier_warnings"] = validation_result["modifier_warnings"]
+    if validation_result.get("suggested_alternatives"):
+        result["suggested_alternatives"] = validation_result["suggested_alternatives"]
 
     # ── LOG: Full pipeline for observability ──
     try:
