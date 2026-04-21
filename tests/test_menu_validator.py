@@ -313,3 +313,112 @@ class TestFuzzyPopularityTieBreak:
         assert result["item_key"] == "teh", (
             f"Expected 'teh' (pop=60) but got '{result['item_key']}'"
         )
+
+
+# ============================================================
+# Bug 1 (Apr 2026): menu typo 'basa' -> 'basah'
+# ============================================================
+
+class TestBasahMenuRename:
+    """The 'basa' typo was replacing valid 'basah' customer utterances
+    with the malformed key, causing the downstream validator to strip
+    the legitimate 'basah' modifier. Ensure the canonical keys are now
+    spelled 'basah'."""
+
+    def test_kuey_teow_goreng_basah_exact_match(self):
+        result = validate_menu_item("kuey teow goreng basah")
+        assert result["valid"] is True
+        assert result["item_key"] == "kuey teow goreng basah"
+
+    def test_maggi_goreng_basah_exact_match(self):
+        result = validate_menu_item("maggi goreng basah")
+        assert result["valid"] is True
+        assert result["item_key"] == "maggi goreng basah"
+
+    def test_bihun_goreng_basah_exact_match(self):
+        result = validate_menu_item("bihun goreng basah")
+        assert result["valid"] is True
+        assert result["item_key"] == "bihun goreng basah"
+
+    def test_no_basa_typo_remains_in_menu(self):
+        """No 'basa' (without trailing h) should survive in MENU keys."""
+        for name in MENU.keys():
+            tokens = name.split()
+            assert "basa" not in tokens, (
+                f"MENU key '{name}' still contains the typo token 'basa'"
+            )
+
+
+# ============================================================
+# Bug 3 (Apr 2026): strip invalid modifiers + suggest alternative
+# ============================================================
+
+class TestInvalidModifierStripped:
+    """An invalid modifier must be STRIPPED (not reject the whole order)
+    and the validator should offer a `suggested_alternative` when a
+    sibling item actually carries that modifier word in its name."""
+
+    def test_basah_on_mee_goreng_is_stripped(self):
+        extracted = [
+            {"matched_item": "mee goreng", "quantity": 1,
+             "confidence": 0.9, "modifiers": ["basah"]},
+        ]
+        result = validate_order_items(extracted)
+
+        # Order still goes through — the whole item is NOT rejected
+        assert result["all_valid"] is True
+        assert len(result["valid_items"]) == 1
+        vi = result["valid_items"][0]
+        assert vi["item_key"] == "mee goreng"
+        # Modifier was stripped
+        assert "basah" not in vi["modifiers"]
+        assert "basah" in vi["stripped_modifiers"]
+
+        # Warning is present and marked as stripped
+        assert len(result["modifier_warnings"]) == 1
+        mw = result["modifier_warnings"][0]
+        assert mw["item"] == "mee goreng"
+        assert mw["modifier"] == "basah"
+        assert mw["action"] == "stripped"
+
+        # Suggested alternative points at a sibling item that does carry
+        # 'basah' — kuey teow goreng basah, bihun goreng basah, etc.
+        assert "suggested_alternative" in mw
+        assert mw["suggested_alternative"] in {
+            "kuey teow goreng basah",
+            "bihun goreng basah",
+            "maggi goreng basah",
+        }
+
+        # Same info surfaces at the top-level response
+        assert len(result["suggested_alternatives"]) == 1
+        sa = result["suggested_alternatives"][0]
+        assert sa["item"] == "mee goreng"
+        assert sa["invalid_modifier"] == "basah"
+        assert sa["alternative"] == mw["suggested_alternative"]
+
+    def test_valid_modifiers_untouched_when_mixed(self):
+        """A mix of valid + invalid modifiers: valid ones kept, invalid stripped."""
+        extracted = [
+            {"matched_item": "mee goreng mamak", "quantity": 1,
+             "confidence": 0.9, "modifiers": ["pedas", "basah"]},
+        ]
+        result = validate_order_items(extracted)
+        assert result["all_valid"] is True
+        vi = result["valid_items"][0]
+        assert "pedas" in vi["modifiers"]
+        assert "basah" not in vi["modifiers"]
+        assert vi["stripped_modifiers"] == ["basah"]
+
+    def test_no_alternative_when_modifier_is_truly_nonsensical(self):
+        """For a made-up modifier with no sibling match, no alternative is offered."""
+        extracted = [
+            {"matched_item": "mee goreng", "quantity": 1,
+             "confidence": 0.9, "modifiers": ["zzznonsense"]},
+        ]
+        result = validate_order_items(extracted)
+        assert result["all_valid"] is True
+        assert result["valid_items"][0]["stripped_modifiers"] == ["zzznonsense"]
+        # No sibling MENU item contains 'zzznonsense' → no suggestion
+        assert result["suggested_alternatives"] == []
+        assert "suggested_alternative" not in result["modifier_warnings"][0]

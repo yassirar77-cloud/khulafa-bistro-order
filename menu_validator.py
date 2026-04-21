@@ -420,6 +420,32 @@ def validate_menu_item(item_name: str) -> dict:
     }
 
 
+def _find_suggested_alternative(item_key: str, invalid_modifier: str) -> str | None:
+    """Suggest a real MENU item that combines the stripped modifier word.
+
+    When a customer says e.g. "mee goreng basah" we strip "basah" (invalid
+    for noodle items), but they likely meant "kuey teow goreng basah" or
+    another sibling item whose name actually contains the word. Prefers
+    same-category items; ties broken by popularity.
+    """
+    mod = (invalid_modifier or "").lower().strip()
+    if not mod or item_key not in MENU:
+        return None
+    item_category = MENU[item_key].get("category", "")
+    candidates = []
+    for name, meta in MENU.items():
+        if name == item_key:
+            continue
+        if mod in name.split():
+            same_cat = meta.get("category", "") == item_category
+            candidates.append((same_cat, meta.get("popularity", 0), name))
+    if not candidates:
+        return None
+    # Sort: same-category first (True > False), then higher popularity
+    candidates.sort(reverse=True)
+    return candidates[0][2]
+
+
 def validate_order_items(extracted_items: list) -> dict:
     """
     Validate a full list of extracted items from DeepSeek/Qwen.
@@ -437,6 +463,7 @@ def validate_order_items(extracted_items: list) -> dict:
                     "price": 2.00,
                     "audio_id": "0051",
                     "modifiers": ["garing"],
+                    "stripped_modifiers": [],
                     "corrected_from": None
                 }
             ],
@@ -449,15 +476,29 @@ def validate_order_items(extracted_items: list) -> dict:
                 }
             ],
             "modifier_warnings": [
-                {"item": "roti canai", "modifier": "kurang manis", "reason": "not allowed for roti items"}
+                {"item": "mee goreng", "modifier": "basah",
+                 "reason": "not allowed for noodle items",
+                 "action": "stripped",
+                 "suggested_alternative": "kuey teow goreng basah"}
+            ],
+            "suggested_alternatives": [
+                {"item": "mee goreng", "invalid_modifier": "basah",
+                 "alternative": "kuey teow goreng basah"}
             ],
             "needs_clarification": bool,
             "all_valid": bool
         }
+
+    Policy (Apr 2026): an invalid modifier on an otherwise-valid item is
+    STRIPPED, not rejected — the order proceeds to the kitchen without
+    the bad modifier. Each strip is logged and surfaced via
+    `modifier_warnings` and `suggested_alternatives` for audit and
+    optional frontend re-prompt.
     """
     valid_items = []
     invalid_items = []
     modifier_warnings = []
+    suggested_alternatives = []
 
     for item in extracted_items:
         item_name = item.get("matched_item", "").strip()
@@ -472,18 +513,35 @@ def validate_order_items(extracted_items: list) -> dict:
         result = validate_menu_item(item_name)
 
         if result["valid"]:
-            # Validate modifiers
+            # Validate modifiers — strip invalid ones, keep the item
             validated_mods = []
+            stripped_mods = []
             for mod in modifiers:
                 mod_result = validate_modifier(result["item_key"], mod)
                 if mod_result["valid"]:
                     validated_mods.append(mod_result["modifier"])
                 else:
-                    modifier_warnings.append({
+                    stripped_mods.append(mod)
+                    alt = _find_suggested_alternative(result["item_key"], mod)
+                    print(
+                        f"[Validator] Stripped invalid modifier '{mod}' "
+                        f"from '{result['item_key']}'"
+                        + (f" (suggested alternative: '{alt}')" if alt else "")
+                    )
+                    warning = {
                         "item": result["item_key"],
                         "modifier": mod,
                         "reason": mod_result["reason"],
-                    })
+                        "action": "stripped",
+                    }
+                    if alt:
+                        warning["suggested_alternative"] = alt
+                        suggested_alternatives.append({
+                            "item": result["item_key"],
+                            "invalid_modifier": mod,
+                            "alternative": alt,
+                        })
+                    modifier_warnings.append(warning)
 
             valid_items.append({
                 "item_key": result["item_key"],
@@ -491,6 +549,7 @@ def validate_order_items(extracted_items: list) -> dict:
                 "price": result["price"],
                 "audio_id": result["audio_id"],
                 "modifiers": validated_mods,
+                "stripped_modifiers": stripped_mods,
                 "corrected_from": result.get("corrected_from"),
             })
         else:
@@ -508,6 +567,7 @@ def validate_order_items(extracted_items: list) -> dict:
         "valid_items": valid_items,
         "invalid_items": invalid_items,
         "modifier_warnings": modifier_warnings,
+        "suggested_alternatives": suggested_alternatives,
         "needs_clarification": needs_clarification,
         "all_valid": all_valid,
     }
@@ -548,6 +608,7 @@ def log_order_pipeline(
             "valid_items": validated_result.get("valid_items", []),
             "invalid_items": validated_result.get("invalid_items", []),
             "modifier_warnings": validated_result.get("modifier_warnings", []),
+            "suggested_alternatives": validated_result.get("suggested_alternatives", []),
             "needs_clarification": validated_result.get("needs_clarification", False),
         },
         "final_order": final_order,
